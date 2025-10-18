@@ -1,26 +1,27 @@
-import React from 'react';
-import logo from './logo.svg';
-import './App.css';
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import Navbar from "./components/Navbar";
+import Dashboard from "./pages/Dashboard";
+import PatientsPage from "./pages/PatientsPage";
+import MedsPage from "./pages/MedsPage";
+import EntriesPage from "./pages/EntriesPage";
+import ObjectsPage from "./pages/ObjectsPage";
+import UsersPage from "./pages/UsersPage";
+import "./styles.css";
 
-function App() {
+export default function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <BrowserRouter>
+      <Navbar />
+      <main className="container">
+        <Routes>
+          <Route path="/" element={<Dashboard/>}/>
+          <Route path="/patients" element={<PatientsPage/>}/>
+          <Route path="/meds" element={<MedsPage/>}/>
+          <Route path="/entries" element={<EntriesPage/>}/>
+          <Route path="/objects" element={<ObjectsPage/>}/>
+          <Route path="/users" element={<UsersPage/>}/>
+        </Routes>
+      </main>
+    </BrowserRouter>
   );
 }
-
-export default App;
