@@ -38,7 +38,7 @@ export default function Navbar() {
               {({ isActive }) => (
                 <Button
                   startIcon={t.icon}
-                  size="small"
+                  size="large"
                   color={isActive ? "primary" : "inherit"}
                   variant={isActive ? "contained" : "text"}
                   sx={{
