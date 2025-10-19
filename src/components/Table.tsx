@@ -1,14 +1,17 @@
-import { ReactNode } from "react";
+import { PropsWithChildren } from "react";
+import { Table as MuiTable, TableHead, TableRow, TableCell, TableBody, Paper } from "@mui/material";
 
-export function Table({ headers, children }: { headers: string[]; children: ReactNode }) {
+export function Table({ headers, children }: PropsWithChildren<{ headers: string[] }>) {
   return (
-    <table style={{width:"100%", borderCollapse:"collapse"}}>
-      <thead>
-        <tr>{headers.map(h=>(
-          <th key={h} style={{textAlign:"left", padding:8, borderBottom:"1px solid #eee"}}>{h}</th>
-        ))}</tr>
-      </thead>
-      <tbody>{children}</tbody>
-    </table>
+    <Paper>
+      <MuiTable>
+        <TableHead>
+          <TableRow>
+            {headers.map(h => <TableCell key={h}>{h}</TableCell>)}
+          </TableRow>
+        </TableHead>
+        <TableBody>{children}</TableBody>
+      </MuiTable>
+    </Paper>
   );
 }
