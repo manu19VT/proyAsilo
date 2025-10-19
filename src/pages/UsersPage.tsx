@@ -15,9 +15,7 @@ export default function UsersPage() {
 
       <Table headers={["Nombre","Correo","Rol"]}>
         <tr>
-          <td style={{padding:8}}>Admin</td>
-          <td style={{padding:8}}>admin@demo.com</td>
-          <td style={{padding:8}}><Chip size="small" color="primary" label="Administrador" /></td>
+        
         </tr>
       </Table>
     </Page>

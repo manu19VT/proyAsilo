@@ -9,7 +9,7 @@ import PeopleAltIcon from "@mui/icons-material/PeopleAlt";
 import logo from "../assets/logo.png";
 
 const tabs = [
-  { to: "/",             label: "Panel" },
+  { to: "/",             label: "Inicio" },
   { to: "/pacientes",    label: "Pacientes",    icon: <GroupIcon /> },
   { to: "/medicamentos", label: "Medicamentos", icon: <MedicationIcon /> },
   { to: "/entradas",     label: "Entradas",     icon: <AssignmentTurnedInIcon /> },
@@ -44,7 +44,7 @@ export default function Navbar() {
                   sx={{
                     ...( !isActive && {
                       color: "text.primary",
-                      "&:hover": { backgroundColor: "rgba(249,115,22,.08)" } // naranja tenue al hover
+                      "&:hover": { backgroundColor: "rgba(248, 103, 0, 0.08)" } // naranja tenue al hover
                     })
                   }}
                 >

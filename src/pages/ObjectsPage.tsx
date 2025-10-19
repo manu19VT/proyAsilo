@@ -14,7 +14,7 @@ export default function ObjectsPage() {
       </Stack>
 
       <Table headers={["Objeto","Propietario","Fecha"]}>
-        <tr><td style={{padding:8}}>Collar</td><td style={{padding:8}}>Juan Pérez</td><td style={{padding:8}}>2025-10-18</td></tr>
+       
       </Table>
     </Page>
   );
