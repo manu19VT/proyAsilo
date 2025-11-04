@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
-import { TextField, Button, Stack, Typography, Paper } from "@mui/material";
+import { TextField, Button, Stack, Typography, Paper, Chip } from "@mui/material";
 import { AnimatePresence, motion } from "framer-motion";
 import Page from "../components/Page";
 import { Table } from "../components/Table";
 import { api } from "../api/client";
 import { Patient } from "../types";
+import { useAuth } from "../contexts/AuthContext";
 
 export default function PatientsPage() {
+  const { user } = useAuth();
   const [items, setItems] = useState<Patient[]>([]);
   const [name, setName] = useState("");
   const [notes, setNotes] = useState("");
@@ -16,7 +18,11 @@ export default function PatientsPage() {
 
   const add = async () => {
     if (!name.trim()) return;
-    await api.addPatient({ name: name.trim(), notes: notes.trim() });
+    await api.addPatient({ 
+      name: name.trim(), 
+      notes: notes.trim(),
+      userId: user?.id 
+    });
     setName(""); setNotes("");
     load();
   };
@@ -55,7 +61,7 @@ export default function PatientsPage() {
         </Stack>
       </Paper>
 
-      <Table headers={["Nombre", "Notas"]}>
+      <Table headers={["Nombre", "Notas", "Creado por", "Actualizado por"]}>
         <AnimatePresence initial={false}>
           {items.map(p => (
             <motion.tr key={p.id}
@@ -65,6 +71,20 @@ export default function PatientsPage() {
               transition={{ duration: .25 }}>
               <td style={{ padding: 8, width: 260 }}>{p.name}</td>
               <td style={{ padding: 8, whiteSpace: "pre-wrap" }}>{p.notes ?? ""}</td>
+              <td style={{ padding: 8 }}>
+                {p.createdByName ? (
+                  <Chip label={p.createdByName} size="small" color="primary" variant="outlined" />
+                ) : (
+                  <Typography variant="caption" color="text.secondary">-</Typography>
+                )}
+              </td>
+              <td style={{ padding: 8 }}>
+                {p.updatedByName ? (
+                  <Chip label={p.updatedByName} size="small" color="secondary" variant="outlined" />
+                ) : (
+                  <Typography variant="caption" color="text.secondary">-</Typography>
+                )}
+              </td>
             </motion.tr>
           ))}
         </AnimatePresence>

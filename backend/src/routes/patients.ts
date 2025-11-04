@@ -30,7 +30,11 @@ router.get('/:id', async (req, res) => {
 // Crear paciente
 router.post('/', async (req, res) => {
   try {
-    const patient = await patientService.createPatient(req.body);
+    // El frontend debe enviar userId en el body: { ..., userId: "..." }
+    const patient = await patientService.createPatient({
+      ...req.body,
+      createdBy: req.body.userId || null
+    });
     res.status(201).json(patient);
   } catch (error: any) {
     res.status(400).json({ error: error.message });
@@ -40,7 +44,11 @@ router.post('/', async (req, res) => {
 // Actualizar paciente
 router.put('/:id', async (req, res) => {
   try {
-    const patient = await patientService.updatePatient(req.params.id, req.body);
+    // El frontend debe enviar userId en el body: { ..., userId: "..." }
+    const patient = await patientService.updatePatient(req.params.id, {
+      ...req.body,
+      updatedBy: req.body.userId || null
+    });
     if (!patient) {
       return res.status(404).json({ error: 'Paciente no encontrado' });
     }

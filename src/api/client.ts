@@ -49,14 +49,14 @@ export const api = {
     return request<Patient>(`/patients/${id}`);
   },
 
-  addPatient: async (p: Omit<Patient, "id" | "contacts"> & { contacts?: Contact[] }) => {
+  addPatient: async (p: Omit<Patient, "id" | "contacts"> & { contacts?: Contact[]; userId?: string }) => {
     return request<Patient>('/patients', {
       method: 'POST',
       body: JSON.stringify(p),
     });
   },
 
-  updatePatient: async (id: ID, p: Partial<Omit<Patient, "id" | "contacts"> & { contacts?: Contact[] }>) => {
+  updatePatient: async (id: ID, p: Partial<Omit<Patient, "id" | "contacts"> & { contacts?: Contact[]; userId?: string }>) => {
     return request<Patient>(`/patients/${id}`, {
       method: 'PUT',
       body: JSON.stringify(p),
@@ -99,14 +99,14 @@ export const api = {
     return request<Medication>(`/medications/${id}`);
   },
 
-  addMed: async (m: Omit<Medication, "id">) => {
+  addMed: async (m: Omit<Medication, "id"> & { userId?: string }) => {
     return request<Medication>('/medications', {
       method: 'POST',
       body: JSON.stringify(m),
     });
   },
 
-  updateMed: async (id: ID, m: Partial<Omit<Medication, "id">>) => {
+  updateMed: async (id: ID, m: Partial<Omit<Medication, "id">> & { userId?: string }) => {
     return request<Medication>(`/medications/${id}`, {
       method: 'PUT',
       body: JSON.stringify(m),

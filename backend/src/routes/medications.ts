@@ -29,7 +29,11 @@ router.get('/:id', async (req, res) => {
 // Crear medicamento
 router.post('/', async (req, res) => {
   try {
-    const medication = await medicationService.createMedication(req.body);
+    // El frontend debe enviar userId en el body: { ..., userId: "..." }
+    const medication = await medicationService.createMedication({
+      ...req.body,
+      createdBy: req.body.userId || null
+    });
     res.status(201).json(medication);
   } catch (error: any) {
     res.status(400).json({ error: error.message });
@@ -39,7 +43,11 @@ router.post('/', async (req, res) => {
 // Actualizar medicamento
 router.put('/:id', async (req, res) => {
   try {
-    const medication = await medicationService.updateMedication(req.params.id, req.body);
+    // El frontend debe enviar userId en el body: { ..., userId: "..." }
+    const medication = await medicationService.updateMedication(req.params.id, {
+      ...req.body,
+      updatedBy: req.body.userId || null
+    });
     if (!medication) {
       return res.status(404).json({ error: 'Medicamento no encontrado' });
     }

@@ -14,6 +14,12 @@ export interface Patient {
   birthDate?: string; // ISO
   notes?: string;
   contacts: Contact[];
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy?: string; // ID del usuario que creó el paciente
+  updatedBy?: string; // ID del usuario que actualizó el paciente
+  createdByName?: string; // Nombre del usuario que creó
+  updatedByName?: string; // Nombre del usuario que actualizó
 }
 
 export interface Medication {
@@ -21,6 +27,12 @@ export interface Medication {
   name: string;
   qty: number;
   expiresAt: string; // ISO
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy?: string; // ID del usuario que creó el medicamento
+  updatedBy?: string; // ID del usuario que actualizó el medicamento
+  createdByName?: string; // Nombre del usuario que creó
+  updatedByName?: string; // Nombre del usuario que actualizó
 }
 
 export interface EntryRequest {
@@ -43,6 +55,7 @@ export interface PersonalObject {
 export interface User {
   id: ID;
   name: string;
-  role: "admin" | "nurse" | "doctor" | "reception";
+  role: "admin" | "nurse" | "doctor" | "usuario";
   email?: string;
+  createdAt?: string;
 }

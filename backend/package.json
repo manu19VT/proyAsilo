@@ -9,6 +9,8 @@
     "start": "node dist/server.js",
     "migrate": "ts-node src/database/migrate.ts",
     "migrate-simple": "ts-node src/database/migrateSimple.ts",
+    "migrate-audit": "ts-node src/database/addAuditFields.ts",
+    "migrate-role": "ts-node src/database/updateUserRole.ts",
     "check-tables": "ts-node src/database/checkTables.ts"
   },
   "dependencies": {

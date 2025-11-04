@@ -47,7 +47,7 @@ export interface PersonalObject {
 export interface User {
   id: ID;
   name: string;
-  role: "admin" | "nurse" | "doctor" | "reception";
+  role: "admin" | "nurse" | "doctor" | "usuario";
   email?: string;
   createdAt?: string;
 }
