@@ -1,11 +1,15 @@
 // src/pages/LoginPage.tsx
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Box, Paper, TextField, Button, Typography, Alert, Stack, Divider, MenuItem } from "@mui/material";
 import { motion } from "framer-motion";
 import Page from "../components/Page";
 import { api } from "../api/client";
+import { useAuth } from "../contexts/AuthContext";
 
 export default function LoginPage() {
+  const navigate = useNavigate();
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -13,7 +17,7 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<'login' | 'register'>("login");
   const [name, setName] = useState("");
-  const [role, setRole] = useState<'admin' | 'nurse' | 'doctor' | 'reception'>("reception");
+  const [role, setRole] = useState<'admin' | 'nurse' | 'doctor' | 'usuario'>("usuario");
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,7 +28,12 @@ export default function LoginPage() {
       try {
         setBusy(true);
         const { user } = await api.login(email, pass);
+        login(user); // Guardar usuario en el contexto
         setInfo(`Bienvenido ${user.name}`);
+        // Redirigir a la página principal después de login exitoso
+        setTimeout(() => {
+          navigate('/');
+        }, 1000);
       } catch (err: any) {
         setError(err.message || 'Error al iniciar sesión');
       } finally {
@@ -35,9 +44,13 @@ export default function LoginPage() {
       try {
         setBusy(true);
         const { user, password } = await api.register({ name, role, email });
+        login(user); // Guardar usuario en el contexto
         setInfo(`Cuenta creada para ${user.name}. Guarda tu contraseña: ${password}`);
         setPass(password);
-        setMode('login');
+        // Redirigir a la página principal después de registro exitoso
+        setTimeout(() => {
+          navigate('/');
+        }, 2000);
       } catch (err: any) {
         setError(err.message || 'Error al crear cuenta');
       } finally {
@@ -86,7 +99,7 @@ export default function LoginPage() {
                   <MenuItem value="admin">Administrador</MenuItem>
                   <MenuItem value="nurse">Enfermería</MenuItem>
                   <MenuItem value="doctor">Médico</MenuItem>
-                  <MenuItem value="reception">Recepción</MenuItem>
+                  <MenuItem value="usuario">Usuario (Solo lectura)</MenuItem>
                 </TextField>
               </>
             )}

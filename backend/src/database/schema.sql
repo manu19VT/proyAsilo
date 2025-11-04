@@ -7,7 +7,7 @@ BEGIN
     CREATE TABLE users (
         id NVARCHAR(36) PRIMARY KEY,
         name NVARCHAR(255) NOT NULL,
-        role NVARCHAR(50) NOT NULL CHECK(role IN ('admin', 'nurse', 'doctor', 'reception')),
+        role NVARCHAR(50) NOT NULL CHECK(role IN ('admin', 'nurse', 'doctor', 'usuario')),
         email NVARCHAR(255) NULL,
         password_hash NVARCHAR(255) NULL,
         created_at DATETIME2 DEFAULT GETDATE()
@@ -24,7 +24,11 @@ BEGIN
         birth_date NVARCHAR(50) NULL,
         notes NVARCHAR(MAX) NULL,
         created_at DATETIME2 DEFAULT GETDATE(),
-        updated_at DATETIME2 DEFAULT GETDATE()
+        updated_at DATETIME2 DEFAULT GETDATE(),
+        created_by NVARCHAR(36) NULL,
+        updated_by NVARCHAR(36) NULL,
+        CONSTRAINT FK_patients_created_by FOREIGN KEY (created_by) REFERENCES users(id),
+        CONSTRAINT FK_patients_updated_by FOREIGN KEY (updated_by) REFERENCES users(id)
     );
 END
 GO
@@ -53,7 +57,11 @@ BEGIN
         qty INT NOT NULL,
         expires_at NVARCHAR(50) NOT NULL,
         created_at DATETIME2 DEFAULT GETDATE(),
-        updated_at DATETIME2 DEFAULT GETDATE()
+        updated_at DATETIME2 DEFAULT GETDATE(),
+        created_by NVARCHAR(36) NULL,
+        updated_by NVARCHAR(36) NULL,
+        CONSTRAINT FK_medications_created_by FOREIGN KEY (created_by) REFERENCES users(id),
+        CONSTRAINT FK_medications_updated_by FOREIGN KEY (updated_by) REFERENCES users(id)
     );
 END
 GO

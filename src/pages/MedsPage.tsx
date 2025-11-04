@@ -5,8 +5,10 @@ import { Table } from "../components/Table";
 import { api } from "../api/client";
 import { Medication } from "../types";
 import { fmt, monthsUntil } from "../utils/date";
+import { useAuth } from "../contexts/AuthContext";
 
 export default function MedsPage() {
+  const { user } = useAuth();
   const [items, setItems] = useState<Medication[]>([]);
   const [form, setForm] = useState({ name: "", qty: 1, expiresAt: "" });
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +22,7 @@ export default function MedsPage() {
       if (!form.name || !form.expiresAt) return;
       const months = monthsUntil(form.expiresAt);
       if (months > 3) throw new Error("La caducidad supera 3 meses.");
-      await api.addMed({ ...form, qty: Number(form.qty) });
+      await api.addMed({ ...form, qty: Number(form.qty), userId: user?.id });
       setForm({ name: "", qty: 1, expiresAt: "" });
       load();
     } catch (e:any) { setError(e.message); }
@@ -60,7 +62,7 @@ export default function MedsPage() {
 
       {/* Tabla de medicamentos */}
       <Box>
-        <Table headers={["Nombre","Cantidad","Caducidad","Regla"]}>
+        <Table headers={["Nombre","Cantidad","Caducidad","Regla","Creado por","Actualizado por"]}>
           {items.map(m => {
             const ok = monthsUntil(m.expiresAt) <= 3;
             return (
@@ -75,6 +77,20 @@ export default function MedsPage() {
                     variant={ok ? "outlined" : "filled"}
                     label={ok ? "✔ Permitido" : "❌ > 3 meses"}
                   />
+                </td>
+                <td style={{ padding: 8 }}>
+                  {m.createdByName ? (
+                    <Chip label={m.createdByName} size="small" color="primary" variant="outlined" />
+                  ) : (
+                    <Typography variant="caption" color="text.secondary">-</Typography>
+                  )}
+                </td>
+                <td style={{ padding: 8 }}>
+                  {m.updatedByName ? (
+                    <Chip label={m.updatedByName} size="small" color="secondary" variant="outlined" />
+                  ) : (
+                    <Typography variant="caption" color="text.secondary">-</Typography>
+                  )}
                 </td>
               </tr>
             );

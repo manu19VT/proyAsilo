@@ -12,8 +12,14 @@ export class PatientService {
         p.birth_date as birthDate,
         p.notes,
         p.created_at as createdAt,
-        p.updated_at as updatedAt
+        p.updated_at as updatedAt,
+        p.created_by as createdBy,
+        p.updated_by as updatedBy,
+        u1.name as createdByName,
+        u2.name as updatedByName
       FROM patients p
+      LEFT JOIN users u1 ON p.created_by = u1.id
+      LEFT JOIN users u2 ON p.updated_by = u2.id
     `;
     
     const params: Record<string, any> = {};
@@ -40,14 +46,20 @@ export class PatientService {
   async getPatientById(id: ID): Promise<Patient | null> {
     const patient = await queryOne<Patient>(`
       SELECT 
-        id,
-        name,
-        birth_date as birthDate,
-        notes,
-        created_at as createdAt,
-        updated_at as updatedAt
-      FROM patients 
-      WHERE id = @id
+        p.id,
+        p.name,
+        p.birth_date as birthDate,
+        p.notes,
+        p.created_at as createdAt,
+        p.updated_at as updatedAt,
+        p.created_by as createdBy,
+        p.updated_by as updatedBy,
+        u1.name as createdByName,
+        u2.name as updatedByName
+      FROM patients p
+      LEFT JOIN users u1 ON p.created_by = u1.id
+      LEFT JOIN users u2 ON p.updated_by = u2.id
+      WHERE p.id = @id
     `, { id });
     
     if (!patient) return null;
@@ -57,20 +69,22 @@ export class PatientService {
   }
 
   // Crear nuevo paciente
-  async createPatient(data: Omit<Patient, 'id' | 'contacts' | 'createdAt' | 'updatedAt'> & { contacts?: Contact[] }): Promise<Patient> {
+  async createPatient(data: Omit<Patient, 'id' | 'contacts' | 'createdAt' | 'updatedAt'> & { contacts?: Contact[]; createdBy?: string }): Promise<Patient> {
     const id = uuidv4();
     const now = new Date().toISOString();
     
     await execute(`
-      INSERT INTO patients (id, name, birth_date, notes, created_at, updated_at)
-      VALUES (@id, @name, @birthDate, @notes, @createdAt, @updatedAt)
+      INSERT INTO patients (id, name, birth_date, notes, created_at, updated_at, created_by, updated_by)
+      VALUES (@id, @name, @birthDate, @notes, @createdAt, @updatedAt, @createdBy, @updatedBy)
     `, {
       id,
       name: data.name,
       birthDate: data.birthDate || null,
       notes: data.notes || null,
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      createdBy: data.createdBy || null,
+      updatedBy: data.createdBy || null
     });
     
     // Agregar contactos si se proporcionan
@@ -90,7 +104,7 @@ export class PatientService {
   }
 
   // Actualizar paciente
-  async updatePatient(id: ID, data: Partial<Omit<Patient, 'id' | 'createdAt'>>): Promise<Patient | null> {
+  async updatePatient(id: ID, data: Partial<Omit<Patient, 'id' | 'createdAt'>> & { updatedBy?: string }): Promise<Patient | null> {
     const now = new Date().toISOString();
     
     await execute(`
@@ -98,13 +112,15 @@ export class PatientService {
       SET name = COALESCE(@name, name),
           birth_date = COALESCE(@birthDate, birth_date),
           notes = COALESCE(@notes, notes),
-          updated_at = @updatedAt
+          updated_at = @updatedAt,
+          updated_by = COALESCE(@updatedBy, updated_by)
       WHERE id = @id
     `, {
       name: data.name || null,
       birthDate: data.birthDate || null,
       notes: data.notes || null,
       updatedAt: now,
+      updatedBy: data.updatedBy || null,
       id
     });
     
@@ -112,7 +128,8 @@ export class PatientService {
   }
 
   // Eliminar paciente
-  async deletePatient(id: ID): Promise<boolean> {
+  async deletePatient(id: ID, deletedBy?: string): Promise<boolean> {
+    // Por ahora solo eliminamos, después podemos agregar un campo deleted_by o una tabla de auditoría
     const rowsAffected = await execute('DELETE FROM patients WHERE id = @id', { id });
     return rowsAffected > 0;
   }
