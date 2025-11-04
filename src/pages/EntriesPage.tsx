@@ -3,7 +3,7 @@ import { Box, TextField, Button, Alert, Typography, Stack, Paper } from "@mui/ma
 import Page from "../components/Page";
 import { Table } from "../components/Table";
 import Printable from "../components/Printable";      // tu componente existente
-import { api } from "../api/mock";                    // tus mocks
+import { api } from "../api/client";                    // tus mocks
 import { EntryRequest, Medication, Patient } from "../types";
 import { fmt } from "../utils/date";
 
