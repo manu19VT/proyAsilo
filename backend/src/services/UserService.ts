@@ -1,0 +1,135 @@
+import { v4 as uuidv4 } from 'uuid';
+import { User } from '../types';
+import { query, queryOne, execute } from '../database/database';
+
+export class UserService {
+  // Listar todos los usuarios
+  async listUsers(): Promise<User[]> {
+    const users = await query<User>(`
+      SELECT 
+        id,
+        name,
+        role,
+        email,
+        created_at as createdAt
+      FROM users
+      ORDER BY name ASC
+    `);
+    return users;
+  }
+
+  // Obtener usuario por ID
+  async getUserById(id: string): Promise<User | null> {
+    const user = await queryOne<User>(`
+      SELECT 
+        id,
+        name,
+        role,
+        email,
+        created_at as createdAt
+      FROM users 
+      WHERE id = @id
+    `, { id });
+    return user;
+  }
+
+  // Obtener usuario por email (incluye hash interno)
+  private async getUserRowByEmail(email: string): Promise<{ id: string; name: string; role: string; email: string | null; created_at: string; password_hash: string | null } | null> {
+    const user = await queryOne<{ id: string; name: string; role: string; email: string | null; created_at: string; password_hash: string | null }>(`
+      SELECT id, name, role, email, created_at, password_hash
+      FROM users
+      WHERE LOWER(email) = LOWER(@email)
+    `, { email });
+    return user;
+  }
+
+  async getUserByEmail(email: string): Promise<User | null> {
+    const row = await this.getUserRowByEmail(email);
+    if (!row) return null;
+    return {
+      id: row.id,
+      name: row.name,
+      role: row.role as any,
+      email: row.email || undefined,
+      createdAt: row.created_at,
+    } as User;
+  }
+
+  // Crear usuario (sin contraseña)
+  async createUser(data: Omit<User, 'id' | 'createdAt'>): Promise<User> {
+    const id = uuidv4();
+    const now = new Date().toISOString();
+    
+    await execute(`
+      INSERT INTO users (id, name, role, email, password_hash, created_at)
+      VALUES (@id, @name, @role, @email, NULL, @createdAt)
+    `, {
+      id,
+      name: data.name,
+      role: data.role,
+      email: (data as any).email || null,
+      createdAt: now
+    });
+    
+    const user = await this.getUserById(id);
+    return user!;
+  }
+
+  // Crear usuario con password hash ya generado
+  async createUserWithPasswordHash(data: { name: string; role: string; email: string; passwordHash: string }): Promise<User> {
+    const id = uuidv4();
+    const now = new Date().toISOString();
+
+    await execute(`
+      INSERT INTO users (id, name, role, email, password_hash, created_at)
+      VALUES (@id, @name, @role, @email, @passwordHash, @createdAt)
+    `, {
+      id,
+      name: data.name,
+      role: data.role,
+      email: data.email,
+      passwordHash: data.passwordHash,
+      createdAt: now
+    });
+
+    const user = await this.getUserById(id);
+    return user!;
+  }
+
+  // Actualizar usuario
+  async updateUser(id: string, data: Partial<Omit<User, 'id' | 'createdAt'>>): Promise<User | null> {
+    const existing = await this.getUserById(id);
+    if (!existing) return null;
+    
+    await execute(`
+      UPDATE users 
+      SET name = COALESCE(@name, name),
+          role = COALESCE(@role, role),
+          email = COALESCE(@email, email)
+      WHERE id = @id
+    `, {
+      name: data.name || null,
+      role: data.role || null,
+      email: data.email || null,
+      id
+    });
+    
+    return await this.getUserById(id);
+  }
+
+  // Eliminar usuario
+  async deleteUser(id: string): Promise<boolean> {
+    const rowsAffected = await execute('DELETE FROM users WHERE id = @id', { id });
+    return rowsAffected > 0;
+  }
+
+  // Validación de contraseña
+  async verifyPassword(email: string, passwordHash: string): Promise<User | null> {
+    const row = await this.getUserRowByEmail(email);
+    if (!row || !row.password_hash) return null;
+    if (row.password_hash !== passwordHash) return null;
+    return await this.getUserById(row.id);
+  }
+}
+
+export const userService = new UserService();

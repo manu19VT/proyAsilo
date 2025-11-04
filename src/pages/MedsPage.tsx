@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Box, TextField, Button, Alert, Chip, Typography, Stack, Paper } from "@mui/material";
 import Page from "../components/Page";
 import { Table } from "../components/Table";
-import { api } from "../api/mock";
+import { api } from "../api/client";
 import { Medication } from "../types";
 import { fmt, monthsUntil } from "../utils/date";
 

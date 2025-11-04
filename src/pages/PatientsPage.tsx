@@ -3,7 +3,7 @@ import { TextField, Button, Stack, Typography, Paper } from "@mui/material";
 import { AnimatePresence, motion } from "framer-motion";
 import Page from "../components/Page";
 import { Table } from "../components/Table";
-import { api } from "../api/mock";
+import { api } from "../api/client";
 import { Patient } from "../types";
 
 export default function PatientsPage() {
