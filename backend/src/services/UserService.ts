@@ -55,19 +55,49 @@ export class UserService {
     } as User;
   }
 
+  // Validar rol
+  private validateRole(role: string | undefined | null): string {
+    const validRoles = ['admin', 'nurse', 'doctor', 'usuario'];
+    
+    // Si es null o undefined, usar 'usuario' por defecto
+    if (!role) {
+      return 'usuario';
+    }
+    
+    // Normalizar: convertir a minúsculas y quitar espacios
+    const normalizedRole = String(role).toLowerCase().trim();
+    
+    // Validar que esté en la lista de roles permitidos
+    if (validRoles.includes(normalizedRole)) {
+      return normalizedRole;
+    }
+    
+    // Si no es válido, usar 'usuario' por defecto
+    console.warn(`Rol inválido recibido: "${role}". Usando 'usuario' por defecto.`);
+    return 'usuario';
+  }
+
   // Crear usuario (sin contraseña)
   async createUser(data: Omit<User, 'id' | 'createdAt'>): Promise<User> {
     const id = uuidv4();
     const now = new Date().toISOString();
+    const validatedRole = this.validateRole(data.role);
+    
+    // Validar que el nombre sea requerido
+    if (!data.name || !data.name.trim()) {
+      throw new Error('El nombre es requerido');
+    }
+    
+    console.log(`Creando usuario: name=${data.name}, role=${validatedRole}, email=${(data as any).email || 'null'}`);
     
     await execute(`
       INSERT INTO users (id, name, role, email, password_hash, created_at)
       VALUES (@id, @name, @role, @email, NULL, @createdAt)
     `, {
       id,
-      name: data.name,
-      role: data.role,
-      email: (data as any).email || null,
+      name: data.name.trim(),
+      role: validatedRole,
+      email: (data as any).email ? String((data as any).email).trim() : null,
       createdAt: now
     });
     
@@ -79,15 +109,26 @@ export class UserService {
   async createUserWithPasswordHash(data: { name: string; role: string; email: string; passwordHash: string }): Promise<User> {
     const id = uuidv4();
     const now = new Date().toISOString();
+    const validatedRole = this.validateRole(data.role);
+
+    // Validar datos requeridos
+    if (!data.name || !data.name.trim()) {
+      throw new Error('El nombre es requerido');
+    }
+    if (!data.email || !data.email.trim()) {
+      throw new Error('El email es requerido');
+    }
+
+    console.log(`Creando usuario con contraseña: name=${data.name}, role=${validatedRole}, email=${data.email}`);
 
     await execute(`
       INSERT INTO users (id, name, role, email, password_hash, created_at)
       VALUES (@id, @name, @role, @email, @passwordHash, @createdAt)
     `, {
       id,
-      name: data.name,
-      role: data.role,
-      email: data.email,
+      name: data.name.trim(),
+      role: validatedRole,
+      email: data.email.trim().toLowerCase(),
       passwordHash: data.passwordHash,
       createdAt: now
     });
@@ -101,6 +142,9 @@ export class UserService {
     const existing = await this.getUserById(id);
     if (!existing) return null;
     
+    // Validar rol si se proporciona
+    const validatedRole = data.role !== undefined ? this.validateRole(data.role) : null;
+    
     await execute(`
       UPDATE users 
       SET name = COALESCE(@name, name),
@@ -109,7 +153,7 @@ export class UserService {
       WHERE id = @id
     `, {
       name: data.name || null,
-      role: data.role || null,
+      role: validatedRole,
       email: data.email || null,
       id
     });
