@@ -1,21 +1,25 @@
 import { v4 as uuidv4 } from 'uuid';
 import { PatientMedication, ID } from '../types';
-import { execute, query } from '../database/database';
+import { execute, query, queryOne } from '../database/database';
 
 export class PatientMedicationService {
   async listByPatient(patientId: ID): Promise<PatientMedication[]> {
     const rows = await query<any>(`
       SELECT 
-        id,
-        patient_id as patientId,
-        medication_id as medicationId,
-        dosage,
-        frequency,
-        prescribed_at as prescribedAt,
-        prescribed_by as prescribedBy
-      FROM patient_medications
-      WHERE patient_id = @patientId
-      ORDER BY prescribed_at DESC
+        pm.id,
+        pm.patient_id as patientId,
+        pm.medication_id as medicationId,
+        pm.dosage,
+        pm.frequency,
+        pm.prescribed_at as prescribedAt,
+        pm.prescribed_by as prescribedBy,
+        m.name as medicationName,
+        m.unit as medicationUnit,
+        m.dosage as medicationDosage
+      FROM patient_medications pm
+      LEFT JOIN medications m ON pm.medication_id = m.id
+      WHERE pm.patient_id = @patientId
+      ORDER BY pm.prescribed_at DESC
     `, { patientId });
 
     return rows.map(row => ({
@@ -25,7 +29,10 @@ export class PatientMedicationService {
       dosage: row.dosage,
       frequency: row.frequency,
       prescribedAt: row.prescribedAt,
-      prescribedBy: row.prescribedBy || undefined
+      prescribedBy: row.prescribedBy || undefined,
+      medicationName: row.medicationName || undefined,
+      medicationUnit: row.medicationUnit || undefined,
+      medicationDosage: row.medicationDosage || undefined
     }));
   }
 
@@ -47,7 +54,35 @@ export class PatientMedicationService {
       prescribedBy: data.prescribedBy || null
     });
 
-    return { id, ...data };
+    const row = await queryOne<any>(`
+      SELECT 
+        pm.id,
+        pm.patient_id as patientId,
+        pm.medication_id as medicationId,
+        pm.dosage,
+        pm.frequency,
+        pm.prescribed_at as prescribedAt,
+        pm.prescribed_by as prescribedBy,
+        m.name as medicationName,
+        m.unit as medicationUnit,
+        m.dosage as medicationDosage
+      FROM patient_medications pm
+      LEFT JOIN medications m ON pm.medication_id = m.id
+      WHERE pm.id = @id
+    `, { id });
+
+    return {
+      id,
+      patientId: row.patientId,
+      medicationId: row.medicationId,
+      dosage: row.dosage,
+      frequency: row.frequency,
+      prescribedAt: row.prescribedAt,
+      prescribedBy: row.prescribedBy || undefined,
+      medicationName: row.medicationName || undefined,
+      medicationUnit: row.medicationUnit || undefined,
+      medicationDosage: row.medicationDosage || undefined
+    };
   }
 }
 

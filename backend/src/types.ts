@@ -55,6 +55,9 @@ export interface PatientMedication {
   frequency: string;
   prescribedAt: string;
   prescribedBy?: string;
+  medicationName?: string;
+  medicationUnit?: string;
+  medicationDosage?: string;
 }
 
 export interface EntryRequest {
@@ -74,6 +77,7 @@ export interface PersonalObject {
   name: string;
   qty: number;
   receivedAt: string;
+  patientName?: string;
 }
 
 export interface User {

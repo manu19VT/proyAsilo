@@ -7,12 +7,14 @@ export class PersonalObjectService {
   async listPersonalObjects(patientId?: ID): Promise<PersonalObject[]> {
     let sql = `
       SELECT 
-        id,
-        patient_id as patientId,
-        name,
-        qty,
-        received_at as receivedAt
-      FROM personal_objects
+        po.id,
+        po.patient_id as patientId,
+        po.name,
+        po.qty,
+        po.received_at as receivedAt,
+        p.name as patientName
+      FROM personal_objects po
+      LEFT JOIN patients p ON po.patient_id = p.id
     `;
     
     const params: Record<string, any> = {};
@@ -32,15 +34,17 @@ export class PersonalObjectService {
   async getPersonalObjectById(id: ID): Promise<PersonalObject | null> {
     const obj = await queryOne<PersonalObject>(`
       SELECT 
-        id,
-        patient_id as patientId,
-        name,
-        qty,
-        received_at as receivedAt
-      FROM personal_objects 
-      WHERE id = @id
+        po.id,
+        po.patient_id as patientId,
+        po.name,
+        po.qty,
+        po.received_at as receivedAt,
+        p.name as patientName
+      FROM personal_objects po
+      LEFT JOIN patients p ON po.patient_id = p.id
+      WHERE po.id = @id
     `, { id });
-    return obj;
+    return obj || null;
   }
 
   // Crear objeto personal
