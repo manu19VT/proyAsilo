@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   TextField,
   Button,
@@ -7,13 +7,11 @@ import {
   Paper,
   Chip,
   Alert,
-  Box,
   MenuItem,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  IconButton,
   Tabs,
   Tab
 } from "@mui/material";
@@ -27,40 +25,43 @@ import {
 import { AnimatePresence, motion } from "framer-motion";
 import Page from "../components/Page";
 import { Table } from "../components/Table";
-import { api } from "../api/mock";
+import { api } from "../api/client";
 import { User } from "../types";
 
+type RoleFilter = "todos" | User["role"];
+
 export default function UsersPage() {
-  const [items, setItems] = useState<User[]>([]);
-  const [filteredItems, setFilteredItems] = useState<User[]>([]);
-  
-  // Filtros
-  const [roleFilter, setRoleFilter] = useState<string>("todos");
-  
-  // Formulario
+  const [users, setUsers] = useState<User[]>([]);
+  const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>("todos");
+
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<"admin" | "nurse" | "doctor" | "reception">("reception");
-  
-  // Diálogo de contraseña
+  const [role, setRole] = useState<User["role"]>("reception");
+
   const [passwordDialog, setPasswordDialog] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [generatedPassword, setGeneratedPassword] = useState("");
-  
-  // Cambiar contraseña
+
   const [changePasswordDialog, setChangePasswordDialog] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
   const load = async () => {
-    const data = await api.listUsers(roleFilter === "todos" ? undefined : roleFilter);
-    setItems(data);
-    setFilteredItems(data);
+    try {
+      const data = await api.listUsers(roleFilter === "todos" ? undefined : roleFilter);
+      setUsers(data);
+      setFilteredUsers(data);
+    } catch (error) {
+      console.error(error);
+      alert("Error al cargar usuarios");
+    }
   };
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roleFilter]);
 
   const resetForm = () => {
@@ -70,33 +71,30 @@ export default function UsersPage() {
     setShowForm(false);
   };
 
-  const validateEmail = (email: string) => {
-    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return re.test(email);
-  };
+  const validateEmail = useMemo(
+    () => (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
+    []
+  );
 
-  const add = async () => {
+  const handleCreateUser = async () => {
     if (!name.trim() || !email.trim() || !validateEmail(email)) {
       alert("Por favor completa todos los campos correctamente");
       return;
     }
-    
     try {
-      const user = await api.addUser({
+      const { user, password } = await api.register({
         name: name.trim(),
         email: email.trim().toLowerCase(),
         role
       });
-      
-      // Mostrar contraseña generada
       setSelectedUser(user);
-      setGeneratedPassword(user.password || "");
+      setGeneratedPassword(password || "");
       setPasswordDialog(true);
-      
       resetForm();
       load();
-    } catch (error) {
-      alert("Error al crear usuario");
+    } catch (error: any) {
+      console.error(error);
+      alert(error?.message || "Error al crear usuario");
     }
   };
 
@@ -107,45 +105,40 @@ export default function UsersPage() {
     setChangePasswordDialog(true);
   };
 
-  const changePassword = async () => {
+  const handleChangePassword = async () => {
     if (!selectedUser || !newPassword.trim() || newPassword !== confirmPassword) {
       alert("Las contraseñas no coinciden");
       return;
     }
-    
     if (newPassword.length < 8) {
       alert("La contraseña debe tener al menos 8 caracteres");
       return;
     }
-    
     try {
-      await api.changePassword(selectedUser.id, newPassword);
+      await api.changePassword(selectedUser.id, newPassword, false);
       alert("Contraseña actualizada correctamente");
       setChangePasswordDialog(false);
       load();
     } catch (error) {
+      console.error(error);
       alert("Error al cambiar contraseña");
     }
   };
 
-  const getRoleName = (role: string) => {
-    const roles: Record<string, string> = {
-      admin: "Administrador",
-      nurse: "Enfermera/o",
-      doctor: "Doctor/a",
-      reception: "Recepción"
-    };
-    return roles[role] || role;
+  const roleLabels: Record<User["role"], string> = {
+    admin: "Administrador",
+    doctor: "Doctor/a",
+    nurse: "Enfermera/o",
+    usuario: "Usuario",
+    reception: "Recepción"
   };
 
-  const getRoleColor = (role: string): "primary" | "success" | "info" | "secondary" => {
-    const colors: Record<string, "primary" | "success" | "info" | "secondary"> = {
-      admin: "primary",
-      doctor: "success",
-      nurse: "info",
-      reception: "secondary"
-    };
-    return colors[role] || "secondary";
+  const roleChipColor: Record<User["role"], "primary" | "success" | "info" | "secondary" | "default"> = {
+    admin: "primary",
+    doctor: "success",
+    nurse: "info",
+    usuario: "default",
+    reception: "secondary"
   };
 
   return (
@@ -162,14 +155,12 @@ export default function UsersPage() {
       </Stack>
 
       <Alert severity="info" icon={<KeyIcon />} sx={{ mb: 2 }}>
-        Al crear un usuario, se genera automáticamente una contraseña aleatoria que debe ser enviada por correo. 
-        El usuario deberá cambiarla en su primer inicio de sesión.
+        Al crear un usuario, se genera automáticamente una contraseña temporal. Debe enviarse al correo y será requerida para el primer inicio de sesión.
       </Alert>
 
-      {/* Filtros */}
       <Paper sx={{ p: 2, mb: 2 }}>
         <Typography variant="subtitle2" gutterBottom>Filtrar por rol</Typography>
-        <Tabs value={roleFilter} onChange={(_, v) => setRoleFilter(v)}>
+        <Tabs value={roleFilter} onChange={(_, value) => setRoleFilter(value)}>
           <Tab label="Todos" value="todos" />
           <Tab label="Administradores" value="admin" />
           <Tab label="Doctores" value="doctor" />
@@ -178,7 +169,6 @@ export default function UsersPage() {
         </Tabs>
       </Paper>
 
-      {/* Formulario */}
       {showForm && (
         <Paper sx={{ p: 2, mb: 2 }}>
           <Typography variant="h6" gutterBottom>Nuevo Usuario</Typography>
@@ -193,7 +183,7 @@ export default function UsersPage() {
                 startAdornment: <PersonIcon sx={{ mr: 1, color: "text.secondary" }} />
               }}
             />
-            
+
             <TextField
               label="Correo electrónico *"
               type="email"
@@ -202,7 +192,11 @@ export default function UsersPage() {
               onChange={(e) => setEmail(e.target.value)}
               fullWidth
               error={email.length > 0 && !validateEmail(email)}
-              helperText={email.length > 0 && !validateEmail(email) ? "Correo inválido" : "Se enviará la contraseña a este correo"}
+              helperText={
+                email.length > 0 && !validateEmail(email)
+                  ? "Correo inválido"
+                  : "Se enviará la contraseña a este correo"
+              }
               InputProps={{
                 startAdornment: <EmailIcon sx={{ mr: 1, color: "text.secondary" }} />
               }}
@@ -213,7 +207,7 @@ export default function UsersPage() {
               select
               size="small"
               value={role}
-              onChange={(e) => setRole(e.target.value as typeof role)}
+              onChange={(e) => setRole(e.target.value as User["role"])}
               fullWidth
             >
               <MenuItem value="admin">Administrador</MenuItem>
@@ -225,10 +219,10 @@ export default function UsersPage() {
             <Alert severity="warning">
               <Typography variant="body2" fontWeight={600}>Permisos del rol seleccionado:</Typography>
               <Typography variant="caption" component="div">
-                {role === "admin" && "• Acceso completo a todas las funciones del sistema"}
-                {role === "doctor" && "• Gestión de pacientes y medicamentos, prescripciones"}
-                {role === "nurse" && "• Registro de medicamentos y cuidados de pacientes"}
-                {role === "reception" && "• Gestión de entradas/salidas y objetos personales"}
+                {role === "admin" && "• Acceso completo al sistema."}
+                {role === "doctor" && "• Gestión de pacientes y medicamentos, prescripciones."}
+                {role === "nurse" && "• Registro de medicamentos y cuidados de pacientes."}
+                {role === "reception" && "• Gestión de entradas/salidas y objetos personales."}
               </Typography>
             </Alert>
 
@@ -238,7 +232,7 @@ export default function UsersPage() {
               </Button>
               <Button
                 variant="contained"
-                onClick={add}
+                onClick={handleCreateUser}
                 disabled={!name.trim() || !email.trim() || !validateEmail(email)}
                 fullWidth
               >
@@ -249,35 +243,34 @@ export default function UsersPage() {
         </Paper>
       )}
 
-      {/* Tabla de usuarios */}
       <Typography variant="body2" color="text.secondary" mb={1}>
-        Mostrando {filteredItems.length} de {items.length} usuarios
+        Mostrando {filteredUsers.length} de {users.length} usuarios
       </Typography>
 
       <Table headers={["Nombre", "Correo", "Rol", "Fecha de creación", "Estado", "Acciones"]}>
         <AnimatePresence initial={false}>
-          {filteredItems.map(u => (
+          {filteredUsers.map(user => (
             <motion.tr
-              key={u.id}
+              key={user.id}
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.25 }}
             >
-              <td style={{ padding: 8, fontWeight: 600 }}>{u.name}</td>
-              <td style={{ padding: 8, fontSize: 12 }}>{u.email}</td>
+              <td style={{ padding: 8, fontWeight: 600 }}>{user.name}</td>
+              <td style={{ padding: 8, fontSize: 12 }}>{user.email}</td>
               <td style={{ padding: 8 }}>
                 <Chip
-                  label={getRoleName(u.role)}
-                  color={getRoleColor(u.role)}
+                  label={roleLabels[user.role] || user.role}
+                  color={roleChipColor[user.role] || "default"}
                   size="small"
                 />
               </td>
               <td style={{ padding: 8, fontSize: 12 }}>
-                {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "-"}
+                {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "-"}
               </td>
               <td style={{ padding: 8 }}>
-                {u.passwordChangeRequired ? (
+                {user.passwordChangeRequired ? (
                   <Chip
                     label="Cambio pendiente"
                     color="warning"
@@ -293,7 +286,7 @@ export default function UsersPage() {
                   size="small"
                   variant="outlined"
                   startIcon={<RefreshIcon />}
-                  onClick={() => openChangePassword(u)}
+                  onClick={() => openChangePassword(user)}
                 >
                   Cambiar contraseña
                 </Button>
@@ -303,13 +296,12 @@ export default function UsersPage() {
         </AnimatePresence>
       </Table>
 
-      {filteredItems.length === 0 && (
+      {filteredUsers.length === 0 && (
         <Alert severity="info" sx={{ mt: 2 }}>
           No se encontraron usuarios.
         </Alert>
       )}
 
-      {/* Diálogo de contraseña generada */}
       <Dialog open={passwordDialog} onClose={() => setPasswordDialog(false)}>
         <DialogTitle>
           <Stack direction="row" alignItems="center" spacing={1}>
@@ -322,7 +314,6 @@ export default function UsersPage() {
             <Alert severity="success">
               El usuario <strong>{selectedUser?.name}</strong> ha sido creado exitosamente.
             </Alert>
-
             <Paper sx={{ p: 2, bgcolor: "#f5f5f5", border: "2px dashed #ccc" }}>
               <Typography variant="subtitle2" gutterBottom>Contraseña temporal generada:</Typography>
               <Typography
@@ -340,21 +331,14 @@ export default function UsersPage() {
                 {generatedPassword}
               </Typography>
             </Paper>
-
             <Alert severity="warning">
               <Typography variant="body2" fontWeight={600}>Importante:</Typography>
               <Typography variant="caption" component="div">
-                • Esta contraseña debe ser enviada al correo: <strong>{selectedUser?.email}</strong>
+                • Envía esta contraseña al correo: <strong>{selectedUser?.email}</strong>
                 <br />
                 • El usuario debe cambiarla en su primer inicio de sesión
                 <br />
-                • Guarda esta contraseña ya que no se mostrará nuevamente
-              </Typography>
-            </Alert>
-
-            <Alert severity="info">
-              <Typography variant="caption">
-                <strong>TODO para tu compañero del backend:</strong> Implementar el envío automático de correo con esta contraseña.
+                • Guarda esta contraseña, no se mostrará nuevamente
               </Typography>
             </Alert>
           </Stack>
@@ -366,15 +350,18 @@ export default function UsersPage() {
         </DialogActions>
       </Dialog>
 
-      {/* Diálogo cambiar contraseña */}
-      <Dialog open={changePasswordDialog} onClose={() => setChangePasswordDialog(false)} maxWidth="xs" fullWidth>
+      <Dialog
+        open={changePasswordDialog}
+        onClose={() => setChangePasswordDialog(false)}
+        maxWidth="xs"
+        fullWidth
+      >
         <DialogTitle>Cambiar contraseña</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <Alert severity="info">
               Usuario: <strong>{selectedUser?.name}</strong>
             </Alert>
-
             <TextField
               label="Nueva contraseña *"
               type="password"
@@ -384,7 +371,6 @@ export default function UsersPage() {
               fullWidth
               helperText="Mínimo 8 caracteres"
             />
-
             <TextField
               label="Confirmar contraseña *"
               type="password"
@@ -393,7 +379,11 @@ export default function UsersPage() {
               onChange={(e) => setConfirmPassword(e.target.value)}
               fullWidth
               error={confirmPassword.length > 0 && newPassword !== confirmPassword}
-              helperText={confirmPassword.length > 0 && newPassword !== confirmPassword ? "Las contraseñas no coinciden" : ""}
+              helperText={
+                confirmPassword.length > 0 && newPassword !== confirmPassword
+                  ? "Las contraseñas no coinciden"
+                  : ""
+              }
             />
           </Stack>
         </DialogContent>
@@ -401,8 +391,12 @@ export default function UsersPage() {
           <Button onClick={() => setChangePasswordDialog(false)}>Cancelar</Button>
           <Button
             variant="contained"
-            onClick={changePassword}
-            disabled={!newPassword.trim() || newPassword !== confirmPassword || newPassword.length < 8}
+            onClick={handleChangePassword}
+            disabled={
+              !newPassword.trim() ||
+              newPassword !== confirmPassword ||
+              newPassword.length < 8
+            }
           >
             Cambiar Contraseña
           </Button>
@@ -411,3 +405,4 @@ export default function UsersPage() {
     </Page>
   );
 }
+
