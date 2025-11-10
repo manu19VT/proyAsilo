@@ -60,9 +60,11 @@ export default function PatientsPage() {
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [birthDate, setBirthDate] = useState("");
+  const [birthPlace, setBirthPlace] = useState("");
   const [curp, setCurp] = useState("");
   const [rfc, setRfc] = useState("");
   const [admissionDate, setAdmissionDate] = useState("");
+  const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
 
   const [contacts, setContacts] = useState<Omit<Contact, "id" | "patientId">[]>([]);
@@ -70,6 +72,8 @@ export default function PatientsPage() {
   const [contactPhone, setContactPhone] = useState("");
   const [contactRelation, setContactRelation] = useState("");
   const [contactRfc, setContactRfc] = useState("");
+  const [contactAge, setContactAge] = useState("");
+  const [contactAddress, setContactAddress] = useState("");
 
   const [dischargeDialog, setDischargeDialog] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
@@ -150,15 +154,19 @@ export default function PatientsPage() {
   const resetForm = () => {
     setName("");
     setBirthDate("");
+    setBirthPlace("");
     setCurp("");
     setRfc("");
     setAdmissionDate("");
+    setAddress("");
     setNotes("");
     setContacts([]);
     setContactName("");
     setContactPhone("");
     setContactRelation("");
     setContactRfc("");
+    setContactAge("");
+    setContactAddress("");
     setShowForm(false);
   };
 
@@ -167,19 +175,29 @@ export default function PatientsPage() {
       alert("Completa todos los campos del contacto");
       return;
     }
+    const trimmedAge = contactAge.trim();
+    const parsedAge = trimmedAge ? Number(trimmedAge) : undefined;
+    if (trimmedAge && (Number.isNaN(parsedAge) || (parsedAge ?? 0) < 0)) {
+      alert("La edad del contacto debe ser un número válido");
+      return;
+    }
     setContacts(prev => [
       ...prev,
       {
         name: contactName.trim(),
         phone: contactPhone.trim(),
         relation: contactRelation.trim(),
-        rfc: contactRfc.trim() || undefined
+        rfc: contactRfc.trim() || undefined,
+        age: parsedAge,
+        address: contactAddress.trim() || undefined
       }
     ]);
     setContactName("");
     setContactPhone("");
     setContactRelation("");
     setContactRfc("");
+    setContactAge("");
+    setContactAddress("");
   };
 
   const removeContact = (index: number) => {
@@ -197,11 +215,13 @@ export default function PatientsPage() {
         name: name.trim(),
         birthDate: birthDate || undefined,
         age: birthDate ? calculateAge(birthDate) : undefined,
+        birthPlace: birthPlace.trim() || undefined,
         curp: curp.trim() || undefined,
         rfc: rfc.trim() || undefined,
         admissionDate: admissionDate
           ? new Date(admissionDate).toISOString()
           : new Date().toISOString(),
+        address: address.trim() || undefined,
         notes: notes.trim() || undefined,
         contacts: contacts as Contact[],
         userId: user?.id
@@ -336,6 +356,14 @@ export default function PatientsPage() {
               />
             </Stack>
 
+            <TextField
+              label="Lugar de nacimiento"
+              size="small"
+              value={birthPlace}
+              onChange={(e) => setBirthPlace(e.target.value)}
+              fullWidth
+            />
+
             <Stack direction="row" spacing={2}>
               <TextField
                 label="CURP"
@@ -367,6 +395,16 @@ export default function PatientsPage() {
             />
 
             <TextField
+              label="Domicilio"
+              size="small"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              multiline
+              rows={2}
+              fullWidth
+            />
+
+            <TextField
               label="Notas"
               size="small"
               value={notes}
@@ -390,6 +428,8 @@ export default function PatientsPage() {
                         <Typography variant="caption" color="text.secondary">
                           {c.relation} • {c.phone}
                           {c.rfc && ` • RFC: ${c.rfc}`}
+                          {typeof c.age === "number" && ` • Edad: ${c.age}`}
+                          {c.address && ` • Domicilio: ${c.address}`}
                         </Typography>
                       </Box>
                       <Button size="small" color="error" onClick={() => removeContact(index)}>
@@ -427,6 +467,23 @@ export default function PatientsPage() {
                     value={contactRelation}
                     onChange={(e) => setContactRelation(e.target.value)}
                     placeholder="Hijo, esposa, etc."
+                    fullWidth
+                  />
+                </Stack>
+                <Stack direction="row" spacing={1}>
+                  <TextField
+                    label="Edad (opcional)"
+                    size="small"
+                    value={contactAge}
+                    onChange={(e) => setContactAge(e.target.value)}
+                    inputProps={{ inputMode: "numeric", pattern: "[0-9]*", min: 0 }}
+                    fullWidth
+                  />
+                  <TextField
+                    label="Domicilio del contacto (opcional)"
+                    size="small"
+                    value={contactAddress}
+                    onChange={(e) => setContactAddress(e.target.value)}
                     fullWidth
                   />
                 </Stack>
@@ -588,4 +645,6 @@ export default function PatientsPage() {
     </Page>
   );
 }
+
+
 

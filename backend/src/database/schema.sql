@@ -72,7 +72,9 @@ BEGIN
         id NVARCHAR(36) PRIMARY KEY,
         name NVARCHAR(255) NOT NULL,
         birth_date NVARCHAR(50) NULL,
+        birth_place NVARCHAR(255) NULL,
         age INT NULL,
+        address NVARCHAR(255) NULL,
         curp NVARCHAR(18) NULL,
         rfc NVARCHAR(13) NULL,
         admission_date NVARCHAR(50) NULL,
@@ -92,6 +94,16 @@ GO
 IF COL_LENGTH('patients', 'age') IS NULL
 BEGIN
     ALTER TABLE patients ADD age INT NULL;
+END
+GO
+IF COL_LENGTH('patients', 'birth_place') IS NULL
+BEGIN
+    ALTER TABLE patients ADD birth_place NVARCHAR(255) NULL;
+END
+GO
+IF COL_LENGTH('patients', 'address') IS NULL
+BEGIN
+    ALTER TABLE patients ADD address NVARCHAR(255) NULL;
 END
 GO
 IF COL_LENGTH('patients', 'curp') IS NULL
@@ -155,6 +167,8 @@ BEGIN
         phone NVARCHAR(50) NOT NULL,
         relation NVARCHAR(100) NOT NULL,
         rfc NVARCHAR(13) NULL,
+        age INT NULL,
+        address NVARCHAR(255) NULL,
         created_at DATETIME2 DEFAULT GETDATE(),
         CONSTRAINT FK_contacts_patient FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
     );
@@ -163,6 +177,16 @@ GO
 IF COL_LENGTH('contacts', 'rfc') IS NULL
 BEGIN
     ALTER TABLE contacts ADD rfc NVARCHAR(13) NULL;
+END
+GO
+IF COL_LENGTH('contacts', 'age') IS NULL
+BEGIN
+    ALTER TABLE contacts ADD age INT NULL;
+END
+GO
+IF COL_LENGTH('contacts', 'address') IS NULL
+BEGIN
+    ALTER TABLE contacts ADD address NVARCHAR(255) NULL;
 END
 GO
 
