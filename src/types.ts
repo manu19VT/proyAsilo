@@ -80,6 +80,8 @@ export interface User {
   role: "admin" | "nurse" | "doctor" | "usuario" | "reception";
   email?: string;
   createdAt?: string;
+  age?: number;
+  birthDate?: string;
   password?: string; // temporal, se enviará por correo
   passwordChangeRequired?: boolean; // si debe cambiar contraseña
   lastLogin?: string;

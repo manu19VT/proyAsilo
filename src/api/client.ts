@@ -32,13 +32,6 @@ export const api = {
     });
   },
 
-  register: async (payload: { name: string; role: User['role']; email: string }) => {
-    return request<{ user: User; password: string }>(`/auth/register`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-  },
-
   // ========== Pacientes ==========
   listPatients: async (filters?: { query?: string; status?: "activo" | "baja"; contactName?: string }) => {
     const params = new URLSearchParams();
@@ -239,8 +232,18 @@ export const api = {
     return request<User>(`/users/${id}`);
   },
 
-  addUser: async (payload: { name: string; role: User['role']; email: string }) => {
-    return api.register(payload);
+  addUser: async (payload: {
+    name: string;
+    role: User['role'];
+    email: string;
+    password: string;
+    age?: number;
+    birthDate?: string;
+  }) => {
+    return request<User>('/users', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   },
 
   updateUser: async (id: ID, u: Partial<Omit<User, "id">>) => {

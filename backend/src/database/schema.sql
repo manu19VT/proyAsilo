@@ -22,6 +22,26 @@ BEGIN
     SET password_change_required = CASE WHEN password_hash IS NULL THEN 0 ELSE 1 END;
 END
 GO
+IF COL_LENGTH('users', 'age') IS NULL
+BEGIN
+    ALTER TABLE users ADD age INT NULL;
+END
+GO
+IF COL_LENGTH('users', 'birth_year') IS NOT NULL
+BEGIN
+    ALTER TABLE users DROP COLUMN birth_year;
+END
+GO
+IF COL_LENGTH('users', 'birth_date') IS NULL
+BEGIN
+    ALTER TABLE users ADD birth_date NVARCHAR(50) NULL;
+END
+GO
+IF COL_LENGTH('users', 'birth_year') IS NULL
+BEGIN
+    ALTER TABLE users ADD birth_year INT NULL;
+END
+GO
 DECLARE @existingUserRoleConstraint NVARCHAR(200);
 SELECT TOP 1 @existingUserRoleConstraint = name 
 FROM sys.check_constraints 

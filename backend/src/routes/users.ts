@@ -27,10 +27,30 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Crear usuario
+// Crear usuario (admin)
 router.post('/', async (req, res) => {
   try {
-    const user = await userService.createUser(req.body);
+    const { name, email, role, password, age, birthDate, requireChange } = req.body || {};
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'name, email y password son requeridos' });
+    }
+
+    const crypto = await import('crypto');
+    const hash = crypto.createHash('sha256');
+    hash.update(`${String(email).toLowerCase()}::${password}`);
+    const passwordHash = hash.digest('hex');
+
+    const user = await userService.createUserWithPasswordHash({
+      name,
+      email,
+      role,
+      passwordHash,
+      age: age !== undefined ? Number(age) : undefined,
+      birthDate: birthDate ?? null,
+      requireChange: !!requireChange
+    });
+
     res.status(201).json(user);
   } catch (error: any) {
     res.status(400).json({ error: error.message });

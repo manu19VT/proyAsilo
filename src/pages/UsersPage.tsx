@@ -20,17 +20,38 @@ import {
   Email as EmailIcon,
   Key as KeyIcon,
   Person as PersonIcon,
-  Refresh as RefreshIcon
+  Refresh as RefreshIcon,
+  DeleteOutline as DeleteIcon
 } from "@mui/icons-material";
 import { AnimatePresence, motion } from "framer-motion";
 import Page from "../components/Page";
 import { Table } from "../components/Table";
 import { api } from "../api/client";
 import { User } from "../types";
+import { useAuth } from "../contexts/AuthContext";
+
+const ROLE_LABELS: Record<User["role"], string> = {
+  admin: "Administrador",
+  doctor: "Doctor/a",
+  nurse: "Enfermera/o",
+  usuario: "Usuario",
+  reception: "Recepción"
+};
+
+const ROLE_COLORS: Record<User["role"], "primary" | "success" | "info" | "secondary" | "default"> = {
+  admin: "primary",
+  doctor: "success",
+  nurse: "info",
+  usuario: "default",
+  reception: "secondary"
+};
 
 type RoleFilter = "todos" | User["role"];
 
 export default function UsersPage() {
+  const { user: currentUser } = useAuth();
+  const isAdmin = currentUser?.role === "admin";
+
   const [users, setUsers] = useState<User[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("todos");
@@ -39,11 +60,12 @@ export default function UsersPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<User["role"]>("reception");
+  const [age, setAge] = useState("");
+  const [birthDate, setBirthDate] = useState("");
+  const [password, setPassword] = useState("");
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const [passwordDialog, setPasswordDialog] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [generatedPassword, setGeneratedPassword] = useState("");
-
   const [changePasswordDialog, setChangePasswordDialog] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -68,6 +90,9 @@ export default function UsersPage() {
     setName("");
     setEmail("");
     setRole("reception");
+    setAge("");
+    setBirthDate("");
+    setPassword("");
     setShowForm(false);
   };
 
@@ -77,19 +102,29 @@ export default function UsersPage() {
   );
 
   const handleCreateUser = async () => {
-    if (!name.trim() || !email.trim() || !validateEmail(email)) {
-      alert("Por favor completa todos los campos correctamente");
+    if (!name.trim() || !email.trim() || !validateEmail(email) || !password.trim()) {
+      alert("Por favor completa nombre, correo válido y contraseña.");
       return;
     }
+
+    const ageValue = age.trim() ? Number(age) : undefined;
+    if (ageValue !== undefined && (Number.isNaN(ageValue) || ageValue < 0)) {
+      alert("La edad debe ser un número válido.");
+      return;
+    }
+
+    const birthDateValue = birthDate.trim() ? birthDate : undefined;
+
     try {
-      const { user, password } = await api.register({
+      await api.addUser({
         name: name.trim(),
         email: email.trim().toLowerCase(),
-        role
+        role,
+        age: ageValue,
+        birthDate: birthDateValue,
+        password: password.trim()
       });
-      setSelectedUser(user);
-      setGeneratedPassword(password || "");
-      setPasswordDialog(true);
+      setSuccessMessage(`Usuario ${name.trim()} creado correctamente. Comparte la contraseña ingresada con el usuario asignado.`);
       resetForm();
       load();
     } catch (error: any) {
@@ -97,6 +132,35 @@ export default function UsersPage() {
       alert(error?.message || "Error al crear usuario");
     }
   };
+
+  const handleDeleteUser = async (user: User) => {
+    if (!isAdmin) return;
+    if (!window.confirm(`¿Eliminar la cuenta de ${user.name}?`)) return;
+    try {
+      await api.deleteUser(user.id);
+      load();
+    } catch (error) {
+      console.error(error);
+      alert("Error al eliminar usuario");
+    }
+  };
+
+  useEffect(() => {
+    if (birthDate.trim()) {
+      const birth = new Date(birthDate);
+      if (!Number.isNaN(birth.getTime())) {
+        const today = new Date();
+        let years = today.getFullYear() - birth.getFullYear();
+        const monthDiff = today.getMonth() - birth.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+          years--;
+        }
+        setAge(years >= 0 ? String(years) : "");
+        return;
+      }
+    }
+    setAge("");
+  }, [birthDate]);
 
   const openChangePassword = (user: User) => {
     setSelectedUser(user);
@@ -125,38 +189,35 @@ export default function UsersPage() {
     }
   };
 
-  const roleLabels: Record<User["role"], string> = {
-    admin: "Administrador",
-    doctor: "Doctor/a",
-    nurse: "Enfermera/o",
-    usuario: "Usuario",
-    reception: "Recepción"
-  };
-
-  const roleChipColor: Record<User["role"], "primary" | "success" | "info" | "secondary" | "default"> = {
-    admin: "primary",
-    doctor: "success",
-    nurse: "info",
-    usuario: "default",
-    reception: "secondary"
-  };
-
   return (
     <Page>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
         <Typography variant="h5" fontWeight={700}>Usuarios</Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => setShowForm(!showForm)}
-        >
-          {showForm ? "Cancelar" : "Nuevo Usuario"}
-        </Button>
+        {isAdmin && (
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => {
+              setSuccessMessage(null);
+              setShowForm(!showForm);
+            }}
+          >
+            {showForm ? "Cancelar" : "Nuevo Usuario"}
+          </Button>
+        )}
       </Stack>
 
-      <Alert severity="info" icon={<KeyIcon />} sx={{ mb: 2 }}>
-        Al crear un usuario, se genera automáticamente una contraseña temporal. Debe enviarse al correo y será requerida para el primer inicio de sesión.
-      </Alert>
+      {!isAdmin && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Solo los administradores pueden crear o modificar cuentas de usuario.
+        </Alert>
+      )}
+
+      {successMessage && (
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccessMessage(null)}>
+          {successMessage}
+        </Alert>
+      )}
 
       <Paper sx={{ p: 2, mb: 2 }}>
         <Typography variant="subtitle2" gutterBottom>Filtrar por rol</Typography>
@@ -169,7 +230,7 @@ export default function UsersPage() {
         </Tabs>
       </Paper>
 
-      {showForm && (
+      {isAdmin && showForm && (
         <Paper sx={{ p: 2, mb: 2 }}>
           <Typography variant="h6" gutterBottom>Nuevo Usuario</Typography>
           <Stack spacing={2}>
@@ -195,7 +256,7 @@ export default function UsersPage() {
               helperText={
                 email.length > 0 && !validateEmail(email)
                   ? "Correo inválido"
-                  : "Se enviará la contraseña a este correo"
+                  : "Usa el correo institucional del usuario"
               }
               InputProps={{
                 startAdornment: <EmailIcon sx={{ mr: 1, color: "text.secondary" }} />
@@ -216,6 +277,39 @@ export default function UsersPage() {
               <MenuItem value="reception">Recepción</MenuItem>
             </TextField>
 
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+              <TextField
+                label="Edad"
+                type="number"
+                size="small"
+                value={age}
+                onChange={(e) => setAge(e.target.value)}
+                fullWidth
+                inputProps={{ min: 0 }}
+                disabled
+                helperText="Se calcula automáticamente al elegir la fecha"
+              />
+              <TextField
+                label="Fecha de nacimiento"
+                type="date"
+                size="small"
+                value={birthDate}
+                onChange={(e) => setBirthDate(e.target.value)}
+                fullWidth
+                InputLabelProps={{ shrink: true }}
+              />
+            </Stack>
+
+            <TextField
+              label="Contraseña *"
+              type="password"
+              size="small"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              fullWidth
+              helperText="Comparte esta contraseña con el usuario asignado."
+            />
+
             <Alert severity="warning">
               <Typography variant="body2" fontWeight={600}>Permisos del rol seleccionado:</Typography>
               <Typography variant="caption" component="div">
@@ -233,7 +327,12 @@ export default function UsersPage() {
               <Button
                 variant="contained"
                 onClick={handleCreateUser}
-                disabled={!name.trim() || !email.trim() || !validateEmail(email)}
+                disabled={
+                  !name.trim() ||
+                  !email.trim() ||
+                  !validateEmail(email) ||
+                  !password.trim()
+                }
                 fullWidth
               >
                 Crear Usuario
@@ -247,7 +346,7 @@ export default function UsersPage() {
         Mostrando {filteredUsers.length} de {users.length} usuarios
       </Typography>
 
-      <Table headers={["Nombre", "Correo", "Rol", "Fecha de creación", "Estado", "Acciones"]}>
+      <Table headers={["Nombre", "Correo", "Rol", "Edad", "Año nacimiento", "Fecha de creación", "Estado", "Acciones"]}>
         <AnimatePresence initial={false}>
           {filteredUsers.map(user => (
             <motion.tr
@@ -261,10 +360,14 @@ export default function UsersPage() {
               <td style={{ padding: 8, fontSize: 12 }}>{user.email}</td>
               <td style={{ padding: 8 }}>
                 <Chip
-                  label={roleLabels[user.role] || user.role}
-                  color={roleChipColor[user.role] || "default"}
+                  label={ROLE_LABELS[user.role] || user.role}
+                  color={ROLE_COLORS[user.role] || "default"}
                   size="small"
                 />
+              </td>
+              <td style={{ padding: 8 }}>{user.age ?? "-"}</td>
+              <td style={{ padding: 8 }}>
+                {user.birthDate ? new Date(user.birthDate).toLocaleDateString() : "-"}
               </td>
               <td style={{ padding: 8, fontSize: 12 }}>
                 {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "-"}
@@ -282,14 +385,31 @@ export default function UsersPage() {
                 )}
               </td>
               <td style={{ padding: 8 }}>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  startIcon={<RefreshIcon />}
-                  onClick={() => openChangePassword(user)}
-                >
-                  Cambiar contraseña
-                </Button>
+                {isAdmin ? (
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<RefreshIcon />}
+                      onClick={() => openChangePassword(user)}
+                    >
+                      Cambiar contraseña
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="error"
+                      startIcon={<DeleteIcon />}
+                      onClick={() => handleDeleteUser(user)}
+                    >
+                      Eliminar
+                    </Button>
+                  </Stack>
+                ) : (
+                  <Typography variant="caption" color="text.secondary">
+                    Solo administradores
+                  </Typography>
+                )}
               </td>
             </motion.tr>
           ))}
@@ -301,54 +421,6 @@ export default function UsersPage() {
           No se encontraron usuarios.
         </Alert>
       )}
-
-      <Dialog open={passwordDialog} onClose={() => setPasswordDialog(false)}>
-        <DialogTitle>
-          <Stack direction="row" alignItems="center" spacing={1}>
-            <KeyIcon color="primary" />
-            <span>Usuario creado correctamente</span>
-          </Stack>
-        </DialogTitle>
-        <DialogContent>
-          <Stack spacing={2}>
-            <Alert severity="success">
-              El usuario <strong>{selectedUser?.name}</strong> ha sido creado exitosamente.
-            </Alert>
-            <Paper sx={{ p: 2, bgcolor: "#f5f5f5", border: "2px dashed #ccc" }}>
-              <Typography variant="subtitle2" gutterBottom>Contraseña temporal generada:</Typography>
-              <Typography
-                variant="h6"
-                fontFamily="monospace"
-                sx={{
-                  bgcolor: "#fff",
-                  p: 1.5,
-                  borderRadius: 1,
-                  textAlign: "center",
-                  letterSpacing: 2,
-                  userSelect: "all"
-                }}
-              >
-                {generatedPassword}
-              </Typography>
-            </Paper>
-            <Alert severity="warning">
-              <Typography variant="body2" fontWeight={600}>Importante:</Typography>
-              <Typography variant="caption" component="div">
-                • Envía esta contraseña al correo: <strong>{selectedUser?.email}</strong>
-                <br />
-                • El usuario debe cambiarla en su primer inicio de sesión
-                <br />
-                • Guarda esta contraseña, no se mostrará nuevamente
-              </Typography>
-            </Alert>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button variant="contained" onClick={() => setPasswordDialog(false)}>
-            Entendido
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       <Dialog
         open={changePasswordDialog}

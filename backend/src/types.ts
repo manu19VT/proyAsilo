@@ -78,6 +78,8 @@ export interface User {
   role: "admin" | "nurse" | "doctor" | "usuario" | "reception";
   email?: string;
   createdAt?: string;
+  age?: number;
+  birthDate?: string;
   password?: string;
   passwordChangeRequired?: boolean;
 }
