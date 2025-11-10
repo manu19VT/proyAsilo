@@ -57,6 +57,9 @@ export interface PatientMedication {
   frequency: string; // cada 8 horas, 3 veces al día, etc.
   prescribedAt: string; // fecha de prescripción
   prescribedBy?: string; // doctor que prescribió
+  medicationName?: string;
+  medicationUnit?: string;
+  medicationDosage?: string;
 }
 
 export interface EntryRequest {
@@ -76,6 +79,7 @@ export interface PersonalObject {
   name: string;
   qty: number;
   receivedAt: string;
+  patientName?: string;
 }
 
 export interface User {

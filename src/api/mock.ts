@@ -168,7 +168,17 @@ export const api = {
 
   // Obtener medicamentos de un paciente
   getPatientMedications: async (patientId: ID) => {
-    return db.patientMeds.filter(pm => pm.patientId === patientId);
+    return db.patientMeds
+      .filter(pm => pm.patientId === patientId)
+      .map(pm => {
+        const med = db.meds.find(m => m.id === pm.medicationId);
+        return {
+          ...pm,
+          medicationName: med?.name,
+          medicationUnit: med?.unit,
+          medicationDosage: med?.dosage
+        };
+      });
   },
 
   // Asignar medicamento a paciente (nombre corregido)
@@ -178,7 +188,13 @@ export const api = {
       id: id()
     };
     db.patientMeds.push(npm);
-    return npm;
+    const med = db.meds.find(m => m.id === data.medicationId);
+    return {
+      ...npm,
+      medicationName: med?.name,
+      medicationUnit: med?.unit,
+      medicationDosage: med?.dosage
+    };
   },
 
   // ============= ENTRADAS/SALIDAS =============
@@ -218,10 +234,23 @@ export const api = {
   // ============= OBJETOS PERSONALES =============
   
   listObjects: async (patientId?: ID) => 
-    patientId ? db.objects.filter(o=>o.patientId===patientId) : db.objects,
+    patientId
+      ? db.objects.filter(o => o.patientId === patientId).map(o => ({
+          ...o,
+          patientName: db.patients.find(p => p.id === o.patientId)?.name
+        }))
+      : db.objects.map(o => ({
+          ...o,
+          patientName: db.patients.find(p => p.id === o.patientId)?.name
+        })),
   
   addObject: async (o: Omit<PersonalObject, "id" | "receivedAt">) => {
-    const no: PersonalObject = { ...o, id: id(), receivedAt: new Date().toISOString() };
+    const no: PersonalObject = {
+      ...o,
+      id: id(),
+      receivedAt: new Date().toISOString(),
+      patientName: db.patients.find(p => p.id === o.patientId)?.name
+    };
     db.objects.push(no);
     return no;
   },

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, ReactNode } from "react";
 import {
   TextField,
   Button,
@@ -8,26 +8,34 @@ import {
   Chip,
   Alert,
   Box,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
   MenuItem,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   Tabs,
-  Tab
+  Tab,
+  CircularProgress
 } from "@mui/material";
 import {
   Add as AddIcon,
   Search as SearchIcon,
   PersonOff as PersonOffIcon,
   RestoreFromTrash as RestoreIcon,
-  Badge as BadgeIcon
+  Badge as BadgeIcon,
+  ContactPhone as ContactIcon,
+  Inventory2 as InventoryIcon,
+  MedicationLiquid as MedicationIcon
 } from "@mui/icons-material";
 import { AnimatePresence, motion } from "framer-motion";
 import Page from "../components/Page";
 import { Table } from "../components/Table";
 import { api } from "../api/client";
-import { Patient, Contact } from "../types";
+import { Patient, Contact, PatientMedication, PersonalObject } from "../types";
 import { useAuth } from "../contexts/AuthContext";
 
 type StatusTab = "activo" | "baja" | "todos";
@@ -78,6 +86,60 @@ export default function PatientsPage() {
   const [dischargeDialog, setDischargeDialog] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [dischargeReason, setDischargeReason] = useState("");
+  const [detailDialog, setDetailDialog] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailPatient, setDetailPatient] = useState<Patient | null>(null);
+  const [detailMedications, setDetailMedications] = useState<PatientMedication[]>([]);
+  const [detailObjects, setDetailObjects] = useState<PersonalObject[]>([]);
+  const [detailError, setDetailError] = useState<string | null>(null);
+
+  const InfoLine = ({ label, value }: { label: string; value?: ReactNode }) => (
+    <Typography variant="body2">
+      <Box component="span" fontWeight={600} mr={0.5}>{label}:</Box>
+      {value ?? "-"}
+    </Typography>
+  );
+
+  const DetailSection = ({
+    title,
+    icon,
+    subtitle,
+    children
+  }: {
+    title: string;
+    icon: ReactNode;
+    subtitle?: string;
+    children: ReactNode;
+  }) => (
+    <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+      <Stack spacing={1.5}>
+        <Stack direction="row" spacing={1.5} alignItems="center">
+          <Box
+            sx={{
+              p: 0.75,
+              borderRadius: 1,
+              bgcolor: "primary.light",
+              color: "primary.main",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}
+          >
+            {icon}
+          </Box>
+          <Box>
+            <Typography variant="subtitle1" fontWeight={600}>{title}</Typography>
+            {subtitle && (
+              <Typography variant="caption" color="text.secondary">
+                {subtitle}
+              </Typography>
+            )}
+          </Box>
+        </Stack>
+        {children}
+      </Stack>
+    </Paper>
+  );
 
   const calculateAge = (birthDateStr?: string): number | undefined => {
     if (!birthDateStr) return undefined;
@@ -90,6 +152,18 @@ export default function PatientsPage() {
       age--;
     }
     return age;
+  };
+
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return "-";
+    const date = new Date(dateStr);
+    return Number.isNaN(date.getTime()) ? "-" : date.toLocaleDateString();
+  };
+
+  const formatDateTime = (dateStr?: string) => {
+    if (!dateStr) return "-";
+    const date = new Date(dateStr);
+    return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString();
   };
 
   const filterPatients = useMemo(
@@ -267,6 +341,42 @@ export default function PatientsPage() {
     }
   };
 
+  const openPatientDetails = async (patientId: string) => {
+    setDetailDialog(true);
+    setDetailLoading(true);
+    setDetailError(null);
+    setDetailPatient(null);
+    setDetailMedications([]);
+    setDetailObjects([]);
+    try {
+      const [patientData, medicationsData, objectsData] = await Promise.all([
+        api.getPatient(patientId),
+        api.getPatientMedications(patientId),
+        api.listObjects(patientId)
+      ]);
+      setDetailPatient({
+        ...patientData,
+        age: patientData.age ?? calculateAge(patientData.birthDate),
+        contacts: patientData.contacts || []
+      });
+      setDetailMedications(medicationsData);
+      setDetailObjects(objectsData ?? []);
+    } catch (error) {
+      console.error(error);
+      setDetailError("Error al cargar los detalles del paciente");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const closeDetailDialog = () => {
+    setDetailDialog(false);
+    setDetailPatient(null);
+    setDetailMedications([]);
+    setDetailObjects([]);
+    setDetailError(null);
+  };
+
   return (
     <Page>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
@@ -427,9 +537,14 @@ export default function PatientsPage() {
                         <Typography variant="body2" fontWeight={600}>{c.name}</Typography>
                         <Typography variant="caption" color="text.secondary">
                           {c.relation} • {c.phone}
-                          {c.rfc && ` • RFC: ${c.rfc}`}
-                          {typeof c.age === "number" && ` • Edad: ${c.age}`}
-                          {c.address && ` • Domicilio: ${c.address}`}
+                          {(() => {
+                            const extras = [
+                              c.rfc ? `RFC: ${c.rfc}` : null,
+                              typeof c.age === "number" ? `Edad: ${c.age}` : null,
+                              c.address ? `Domicilio: ${c.address}` : null
+                            ].filter(Boolean) as string[];
+                            return extras.length ? ` • ${extras.join(" • ")}` : "";
+                          })()}
                         </Typography>
                       </Box>
                       <Button size="small" color="error" onClick={() => removeContact(index)}>
@@ -570,27 +685,36 @@ export default function PatientsPage() {
                 />
               </td>
               <td style={{ padding: 8 }}>
-                {patient.status === "activo" ? (
+                <Stack spacing={1}>
                   <Button
                     size="small"
                     variant="outlined"
-                    color="error"
-                    startIcon={<PersonOffIcon />}
-                    onClick={() => openDischargeDialog(patient)}
+                    onClick={() => openPatientDetails(patient.id)}
                   >
-                    Dar de baja
+                    Ver detalles
                   </Button>
-                ) : (
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="success"
-                    startIcon={<RestoreIcon />}
-                    onClick={() => handleReactivate(patient.id)}
-                  >
-                    Reactivar
-                  </Button>
-                )}
+                  {patient.status === "activo" ? (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="error"
+                      startIcon={<PersonOffIcon />}
+                      onClick={() => openDischargeDialog(patient)}
+                    >
+                      Dar de baja
+                    </Button>
+                  ) : (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="success"
+                      startIcon={<RestoreIcon />}
+                      onClick={() => handleReactivate(patient.id)}
+                    >
+                      Reactivar
+                    </Button>
+                  )}
+                </Stack>
               </td>
             </motion.tr>
           ))}
@@ -602,6 +726,249 @@ export default function PatientsPage() {
           No se encontraron pacientes.
         </Alert>
       )}
+
+      <Dialog
+        open={detailDialog}
+        onClose={closeDetailDialog}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Detalles del paciente</DialogTitle>
+        <DialogContent dividers>
+          {detailLoading ? (
+            <Stack alignItems="center" justifyContent="center" spacing={2} sx={{ py: 4 }}>
+              <CircularProgress size={28} />
+              <Typography variant="body2" color="text.secondary">
+                Cargando información...
+              </Typography>
+            </Stack>
+          ) : detailError ? (
+            <Alert severity="error">{detailError}</Alert>
+          ) : detailPatient ? (
+            <Stack spacing={2}>
+              <DetailSection
+                title="Datos generales"
+                icon={<BadgeIcon fontSize="small" />}
+              >
+                <Stack spacing={1}>
+                  <Typography variant="h6" fontWeight={700}>{detailPatient.name}</Typography>
+                  <InfoLine
+                    label="ID"
+                    value={(
+                      <Typography component="span" fontFamily="monospace">
+                        {detailPatient.id}
+                      </Typography>
+                    )}
+                  />
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                    <InfoLine label="Fecha de nacimiento" value={formatDate(detailPatient.birthDate)} />
+                    <InfoLine label="Edad" value={detailPatient.age ? `${detailPatient.age} años` : "-"} />
+                  </Stack>
+                  {detailPatient.birthPlace && (
+                    <InfoLine label="Lugar de nacimiento" value={detailPatient.birthPlace} />
+                  )}
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                    <InfoLine label="CURP" value={detailPatient.curp || "-"} />
+                    <InfoLine label="RFC" value={detailPatient.rfc || "-"} />
+                  </Stack>
+                  {detailPatient.address && (
+                    <InfoLine label="Domicilio" value={detailPatient.address} />
+                  )}
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="center">
+                    <InfoLine label="Ingreso" value={formatDate(detailPatient.admissionDate)} />
+                    <InfoLine
+                      label="Estado"
+                      value={(
+                        <Chip
+                          size="small"
+                          color={detailPatient.status === "activo" ? "success" : "default"}
+                          label={detailPatient.status === "activo" ? "Activo" : "Baja"}
+                        />
+                      )}
+                    />
+                  </Stack>
+                </Stack>
+                {detailPatient.notes && (
+                  <Alert severity="info" sx={{ mt: 1 }}>
+                    {detailPatient.notes}
+                  </Alert>
+                )}
+              </DetailSection>
+
+              <DetailSection
+                title="Contactos"
+                icon={<ContactIcon fontSize="small" />}
+                subtitle={detailPatient.contacts.length > 0 ? `${detailPatient.contacts.length} contacto(s)` : "Sin contactos registrados"}
+              >
+                {detailPatient.contacts.length > 0 ? (
+                  <List
+                    dense
+                    sx={{
+                      border: "1px solid",
+                      borderColor: "divider",
+                      borderRadius: 1,
+                      bgcolor: "background.paper",
+                      "& .MuiListItemIcon-root": { minWidth: 32, color: "primary.main" },
+                      "& .MuiListItem-root:not(:last-of-type)": {
+                        borderBottom: "1px solid",
+                        borderColor: "divider"
+                      }
+                    }}
+                  >
+                    {detailPatient.contacts.map(contact => {
+                      const extras = [
+                        contact.phone ? `Teléfono: ${contact.phone}` : null,
+                        contact.rfc ? `RFC: ${contact.rfc}` : null,
+                        typeof contact.age === "number" ? `Edad: ${contact.age}` : null,
+                        contact.address ? `Domicilio: ${contact.address}` : null
+                      ].filter(Boolean).join(" • ");
+                      return (
+                        <ListItem key={contact.id || `${contact.name}-${contact.phone}`} alignItems="flex-start">
+                          <ListItemIcon>
+                            <ContactIcon fontSize="small" />
+                          </ListItemIcon>
+                          <ListItemText
+                            primary={(
+                              <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                                <Typography variant="body2" fontWeight={600}>
+                                  {contact.name}
+                                </Typography>
+                                <Chip
+                                  size="small"
+                                  variant="outlined"
+                                  color="primary"
+                                  label={contact.relation}
+                                />
+                              </Stack>
+                            )}
+                            secondary={extras ? (
+                              <Typography variant="caption" color="text.secondary" display="block">
+                                {extras}
+                              </Typography>
+                            ) : null}
+                          />
+                        </ListItem>
+                      );
+                    })}
+                  </List>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    No hay contactos registrados.
+                  </Typography>
+                )}
+              </DetailSection>
+
+              <DetailSection
+                title="Medicamentos recetados"
+                icon={<MedicationIcon fontSize="small" />}
+                subtitle={detailMedications.length > 0 ? `${detailMedications.length} receta(s)` : "Sin medicamentos registrados"}
+              >
+                {detailMedications.length > 0 ? (
+                  <List
+                    dense
+                    sx={{
+                      border: "1px solid",
+                      borderColor: "divider",
+                      borderRadius: 1,
+                      bgcolor: "background.paper",
+                      "& .MuiListItemIcon-root": { minWidth: 32, color: "primary.main" },
+                      "& .MuiListItem-root:not(:last-of-type)": {
+                        borderBottom: "1px solid",
+                        borderColor: "divider"
+                      }
+                    }}
+                  >
+                    {detailMedications.map(med => (
+                      <ListItem key={med.id} alignItems="flex-start">
+                        <ListItemIcon>
+                          <MedicationIcon fontSize="small" />
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={(
+                            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                              <Typography variant="body2" fontWeight={600}>
+                                {med.medicationName || "Medicamento"}
+                              </Typography>
+                              <Chip size="small" label={med.dosage} />
+                              <Chip size="small" variant="outlined" label={med.frequency} />
+                            </Stack>
+                          )}
+                          secondary={(
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              Recetado: {formatDateTime(med.prescribedAt)}
+                              {med.medicationDosage && ` • Dosis recomendada: ${med.medicationDosage}`}
+                              {med.medicationUnit && ` • Unidad: ${med.medicationUnit}`}
+                            </Typography>
+                          )}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                ) : (
+                  <Alert severity="info">
+                    Este paciente no tiene medicamentos recetados.
+                  </Alert>
+                )}
+              </DetailSection>
+
+              <DetailSection
+                title="Objetos personales"
+                icon={<InventoryIcon fontSize="small" />}
+                subtitle={detailObjects.length > 0 ? `${detailObjects.length} objeto(s)` : "Sin objetos registrados"}
+              >
+                {detailObjects.length > 0 ? (
+                  <List
+                    dense
+                    sx={{
+                      border: "1px solid",
+                      borderColor: "divider",
+                      borderRadius: 1,
+                      bgcolor: "background.paper",
+                      "& .MuiListItemIcon-root": { minWidth: 32, color: "primary.main" },
+                      "& .MuiListItem-root:not(:last-of-type)": {
+                        borderBottom: "1px solid",
+                        borderColor: "divider"
+                      }
+                    }}
+                  >
+                    {detailObjects.map(obj => (
+                      <ListItem key={obj.id}>
+                        <ListItemIcon>
+                          <InventoryIcon fontSize="small" />
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={(
+                            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                              <Typography variant="body2" fontWeight={600}>
+                                {obj.name}
+                              </Typography>
+                              <Chip size="small" label={`Cantidad: ${obj.qty}`} />
+                            </Stack>
+                          )}
+                          secondary={(
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              Registrado: {formatDate(obj.receivedAt)}
+                            </Typography>
+                          )}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    No hay objetos personales registrados.
+                  </Typography>
+                )}
+              </DetailSection>
+            </Stack>
+          ) : (
+            <Typography variant="body2">Selecciona un paciente para ver sus detalles.</Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeDetailDialog}>Cerrar</Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog
         open={dischargeDialog}
