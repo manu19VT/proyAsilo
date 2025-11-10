@@ -11,7 +11,10 @@ export class ContactService {
         patient_id as patientId,
         name,
         phone,
-        relation
+        relation,
+        rfc,
+        age,
+        address
       FROM contacts 
       WHERE id = ?
     `).get(id) as Contact | undefined || null;
@@ -22,9 +25,19 @@ export class ContactService {
     const id = uuidv4();
     
     db.prepare(`
-      INSERT INTO contacts (id, patient_id, name, phone, relation, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, data.patientId, data.name, data.phone, data.relation, new Date().toISOString());
+      INSERT INTO contacts (id, patient_id, name, phone, relation, rfc, age, address, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      data.patientId,
+      data.name,
+      data.phone,
+      data.relation,
+      data.rfc ?? null,
+      data.age ?? null,
+      data.address ?? null,
+      new Date().toISOString()
+    );
     
     return { id, ...data };
   }
@@ -39,9 +52,21 @@ export class ContactService {
       SET patient_id = COALESCE(?, patient_id),
           name = COALESCE(?, name),
           phone = COALESCE(?, phone),
-          relation = COALESCE(?, relation)
+          relation = COALESCE(?, relation),
+          rfc = COALESCE(?, rfc),
+          age = COALESCE(?, age),
+          address = COALESCE(?, address)
       WHERE id = ?
-    `).run(data.patientId || null, data.name || null, data.phone || null, data.relation || null, id);
+    `).run(
+      data.patientId || null,
+      data.name || null,
+      data.phone || null,
+      data.relation || null,
+      data.rfc || null,
+      data.age ?? null,
+      data.address || null,
+      id
+    );
     
     return this.getContactById(id);
   }
@@ -54,6 +79,8 @@ export class ContactService {
 }
 
 export const contactService = new ContactService();
+
+
 
 
 

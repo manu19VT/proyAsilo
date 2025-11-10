@@ -7,6 +7,8 @@ export interface Contact {
   phone: string;
   relation: string; // hijo, hija, etc.
   rfc?: string; // RFC del contacto
+  age?: number;
+  address?: string;
 }
 
 export interface Patient {
@@ -14,6 +16,8 @@ export interface Patient {
   name: string;
   birthDate?: string; // ISO
   age?: number; // calculada automáticamente
+  birthPlace?: string;
+  address?: string;
   curp?: string; // CURP del paciente
   rfc?: string; // RFC del paciente
   admissionDate?: string; // fecha de ingreso ISO

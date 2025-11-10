@@ -86,6 +86,8 @@ export const api = {
       name: p.name, 
       birthDate: p.birthDate,
       age,
+      birthPlace: p.birthPlace,
+      address: p.address,
       curp: p.curp,
       rfc: p.rfc,
       admissionDate: p.admissionDate || new Date().toISOString(),

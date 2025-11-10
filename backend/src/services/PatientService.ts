@@ -28,6 +28,8 @@ export class PatientService {
       name: row.name,
       birthDate: row.birthDate || undefined,
       age: row.age ?? calculateAge(row.birthDate),
+      birthPlace: row.birthPlace || undefined,
+      address: row.address || undefined,
       curp: row.curp || undefined,
       rfc: row.rfc || undefined,
       admissionDate: row.admissionDate || undefined,
@@ -53,7 +55,9 @@ export class PatientService {
         p.id,
         p.name,
         p.birth_date as birthDate,
+        p.birth_place as birthPlace,
         p.age,
+        p.address as address,
         p.curp,
         p.rfc,
         p.admission_date as admissionDate,
@@ -132,7 +136,9 @@ export class PatientService {
         p.id,
         p.name,
         p.birth_date as birthDate,
+        p.birth_place as birthPlace,
         p.age,
+        p.address as address,
         p.curp,
         p.rfc,
         p.admission_date as admissionDate,
@@ -167,18 +173,20 @@ export class PatientService {
 
     await execute(`
       INSERT INTO patients (
-        id, name, birth_date, age, curp, rfc, admission_date, notes, status, discharge_date, discharge_reason,
+        id, name, birth_date, birth_place, age, address, curp, rfc, admission_date, notes, status, discharge_date, discharge_reason,
         created_at, updated_at, created_by, updated_by
       )
       VALUES (
-        @id, @name, @birthDate, @age, @curp, @rfc, @admissionDate, @notes, @status, NULL, NULL,
+        @id, @name, @birthDate, @birthPlace, @age, @address, @curp, @rfc, @admissionDate, @notes, @status, NULL, NULL,
         @createdAt, @updatedAt, @createdBy, @updatedBy
       )
     `, {
       id,
       name: data.name,
       birthDate: data.birthDate || null,
+      birthPlace: data.birthPlace || null,
       age: age ?? null,
+      address: data.address || null,
       curp: data.curp || null,
       rfc: data.rfc || null,
       admissionDate: data.admissionDate || now,
@@ -198,7 +206,9 @@ export class PatientService {
           name: contact.name,
           phone: contact.phone,
           relation: contact.relation,
-          rfc: contact.rfc
+          rfc: contact.rfc,
+          age: contact.age,
+          address: contact.address
         });
       }
     }
@@ -216,7 +226,9 @@ export class PatientService {
       UPDATE patients 
       SET name = COALESCE(@name, name),
           birth_date = COALESCE(@birthDate, birth_date),
+          birth_place = COALESCE(@birthPlace, birth_place),
           age = COALESCE(@age, age),
+          address = COALESCE(@address, address),
           curp = COALESCE(@curp, curp),
           rfc = COALESCE(@rfc, rfc),
           admission_date = COALESCE(@admissionDate, admission_date),
@@ -230,7 +242,9 @@ export class PatientService {
     `, {
       name: data.name || null,
       birthDate: data.birthDate || null,
+      birthPlace: data.birthPlace || null,
       age: age ?? null,
+      address: data.address || null,
       curp: data.curp || null,
       rfc: data.rfc || null,
       admissionDate: data.admissionDate || null,
@@ -252,7 +266,9 @@ export class PatientService {
           name: contact.name,
           phone: contact.phone,
           relation: contact.relation,
-          rfc: contact.rfc
+          rfc: contact.rfc,
+          age: contact.age,
+          address: contact.address
         });
       }
     }
@@ -313,7 +329,9 @@ export class PatientService {
         name,
         phone,
         relation,
-        rfc
+        rfc,
+        age,
+        address
       FROM contacts 
       WHERE patient_id = @patientId
       ORDER BY name ASC
@@ -326,8 +344,8 @@ export class PatientService {
     const id = uuidv4();
     
     await execute(`
-      INSERT INTO contacts (id, patient_id, name, phone, relation, rfc, created_at)
-      VALUES (@id, @patientId, @name, @phone, @relation, @rfc, @createdAt)
+      INSERT INTO contacts (id, patient_id, name, phone, relation, rfc, age, address, created_at)
+      VALUES (@id, @patientId, @name, @phone, @relation, @rfc, @age, @address, @createdAt)
     `, {
       id,
       patientId: data.patientId,
@@ -335,6 +353,8 @@ export class PatientService {
       phone: data.phone,
       relation: data.relation,
       rfc: data.rfc || null,
+      age: data.age ?? null,
+      address: data.address || null,
       createdAt: new Date().toISOString()
     });
     
@@ -351,13 +371,17 @@ export class PatientService {
       SET name = COALESCE(@name, name),
           phone = COALESCE(@phone, phone),
           relation = COALESCE(@relation, relation),
-          rfc = COALESCE(@rfc, rfc)
+          rfc = COALESCE(@rfc, rfc),
+          age = COALESCE(@age, age),
+          address = COALESCE(@address, address)
       WHERE id = @id
     `, {
       name: data.name || null,
       phone: data.phone || null,
       relation: data.relation || null,
       rfc: data.rfc || null,
+      age: data.age ?? null,
+      address: data.address || null,
       id
     });
     

@@ -7,6 +7,8 @@ export interface Contact {
   phone: string;
   relation: string;
   rfc?: string;
+  age?: number;
+  address?: string;
 }
 
 export interface Patient {
@@ -14,6 +16,8 @@ export interface Patient {
   name: string;
   birthDate?: string;
   age?: number;
+  birthPlace?: string;
+  address?: string;
   curp?: string;
   rfc?: string;
   admissionDate?: string;
