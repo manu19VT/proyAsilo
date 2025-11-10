@@ -12,6 +12,8 @@ export class UserService {
         role,
         email,
         created_at as createdAt,
+        age,
+        birth_date as birthDate,
         password_change_required as passwordChangeRequired
       FROM users
     `;
@@ -27,6 +29,8 @@ export class UserService {
     const users = await query<User>(sql, params);
     return users.map(user => ({
       ...user,
+      age: user.age ?? undefined,
+      birthDate: user.birthDate ?? undefined,
       passwordChangeRequired: !!user.passwordChangeRequired
     }));
   }
@@ -40,17 +44,26 @@ export class UserService {
         role,
         email,
         created_at as createdAt,
+        age,
+        birth_date as birthDate,
         password_change_required as passwordChangeRequired
       FROM users 
       WHERE id = @id
     `, { id });
-    return user ? { ...user, passwordChangeRequired: !!user.passwordChangeRequired } : null;
+    return user
+      ? {
+          ...user,
+          age: user.age ?? undefined,
+          birthDate: user.birthDate ?? undefined,
+          passwordChangeRequired: !!user.passwordChangeRequired
+        }
+      : null;
   }
 
   // Obtener usuario por email (incluye hash interno)
-  private async getUserRowByEmail(email: string): Promise<{ id: string; name: string; role: string; email: string | null; created_at: string; password_hash: string | null; password_change_required: number | null } | null> {
-    const user = await queryOne<{ id: string; name: string; role: string; email: string | null; created_at: string; password_hash: string | null; password_change_required: number | null }>(`
-      SELECT id, name, role, email, created_at, password_hash, password_change_required
+  private async getUserRowByEmail(email: string): Promise<{ id: string; name: string; role: string; email: string | null; created_at: string; password_hash: string | null; password_change_required: number | null; age: number | null; birth_date: string | null } | null> {
+    const user = await queryOne<{ id: string; name: string; role: string; email: string | null; created_at: string; password_hash: string | null; password_change_required: number | null; age: number | null; birth_date: string | null }>(`
+      SELECT id, name, role, email, created_at, password_hash, password_change_required, age, birth_date
       FROM users
       WHERE LOWER(email) = LOWER(@email)
     `, { email });
@@ -66,6 +79,8 @@ export class UserService {
       role: row.role as any,
       email: row.email || undefined,
       createdAt: row.created_at,
+      age: row.age ?? undefined,
+      birthDate: row.birth_date ?? undefined,
       passwordChangeRequired: !!row.password_change_required
     } as User;
   }
@@ -106,13 +121,15 @@ export class UserService {
     console.log(`Creando usuario: name=${data.name}, role=${validatedRole}, email=${(data as any).email || 'null'}`);
     
     await execute(`
-      INSERT INTO users (id, name, role, email, password_hash, password_change_required, created_at)
-      VALUES (@id, @name, @role, @email, NULL, 0, @createdAt)
+      INSERT INTO users (id, name, role, email, age, birth_date, password_hash, password_change_required, created_at)
+      VALUES (@id, @name, @role, @email, @age, @birthDate, NULL, 0, @createdAt)
     `, {
       id,
       name: data.name.trim(),
       role: validatedRole,
       email: (data as any).email ? String((data as any).email).trim() : null,
+      age: (data as any).age ?? null,
+      birthDate: (data as any).birthDate ?? null,
       createdAt: now
     });
     
@@ -121,7 +138,7 @@ export class UserService {
   }
 
   // Crear usuario con password hash ya generado
-  async createUserWithPasswordHash(data: { name: string; role: string; email: string; passwordHash: string }): Promise<User> {
+  async createUserWithPasswordHash(data: { name: string; role: string; email: string; passwordHash: string; age?: number; birthDate?: string; requireChange?: boolean }): Promise<User> {
     const id = uuidv4();
     const now = new Date().toISOString();
     const validatedRole = this.validateRole(data.role);
@@ -137,14 +154,17 @@ export class UserService {
     console.log(`Creando usuario con contraseña: name=${data.name}, role=${validatedRole}, email=${data.email}`);
 
     await execute(`
-      INSERT INTO users (id, name, role, email, password_hash, password_change_required, created_at)
-      VALUES (@id, @name, @role, @email, @passwordHash, 1, @createdAt)
+      INSERT INTO users (id, name, role, email, age, birth_date, password_hash, password_change_required, created_at)
+      VALUES (@id, @name, @role, @email, @age, @birthDate, @passwordHash, @passwordChangeRequired, @createdAt)
     `, {
       id,
       name: data.name.trim(),
       role: validatedRole,
       email: data.email.trim().toLowerCase(),
+      age: data.age ?? null,
+      birthDate: data.birthDate ?? null,
       passwordHash: data.passwordHash,
+      passwordChangeRequired: data.requireChange ? 1 : 0,
       createdAt: now
     });
 
@@ -164,12 +184,16 @@ export class UserService {
       UPDATE users 
       SET name = COALESCE(@name, name),
           role = COALESCE(@role, role),
-          email = COALESCE(@email, email)
+          email = COALESCE(@email, email),
+          age = COALESCE(@age, age),
+          birth_date = COALESCE(@birthDate, birth_date)
       WHERE id = @id
     `, {
       name: data.name || null,
       role: validatedRole,
       email: data.email || null,
+      age: (data as any).age ?? null,
+      birthDate: (data as any).birthDate ?? null,
       id
     });
     
@@ -196,6 +220,16 @@ export class UserService {
 
   // Eliminar usuario
   async deleteUser(id: string): Promise<boolean> {
+    const existing = await this.getUserById(id);
+    if (!existing) return false;
+
+    // Limpiar referencias en tablas relacionadas
+    await execute('UPDATE patients SET created_by = NULL WHERE created_by = @id', { id });
+    await execute('UPDATE patients SET updated_by = NULL WHERE updated_by = @id', { id });
+    await execute('UPDATE medications SET created_by = NULL WHERE created_by = @id', { id });
+    await execute('UPDATE medications SET updated_by = NULL WHERE updated_by = @id', { id });
+    await execute('UPDATE patient_medications SET prescribed_by = NULL WHERE prescribed_by = @id', { id });
+
     const rowsAffected = await execute('DELETE FROM users WHERE id = @id', { id });
     return rowsAffected > 0;
   }
