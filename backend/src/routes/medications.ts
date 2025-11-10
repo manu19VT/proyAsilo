@@ -6,7 +6,8 @@ const router = express.Router();
 // Listar medicamentos
 router.get('/', async (req, res) => {
   try {
-    const medications = await medicationService.listMedications();
+    const { q } = req.query as { q?: string };
+    const medications = await medicationService.listMedications(q);
     res.json(medications);
   } catch (error: any) {
     res.status(500).json({ error: error.message });

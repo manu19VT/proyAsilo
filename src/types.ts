@@ -6,14 +6,22 @@ export interface Contact {
   name: string;
   phone: string;
   relation: string; // hijo, hija, etc.
+  rfc?: string; // RFC del contacto
 }
 
 export interface Patient {
   id: ID;
   name: string;
   birthDate?: string; // ISO
+  age?: number; // calculada automáticamente
+  curp?: string; // CURP del paciente
+  rfc?: string; // RFC del paciente
+  admissionDate?: string; // fecha de ingreso ISO
   notes?: string;
   contacts: Contact[];
+  status: "activo" | "baja";
+  dischargeDate?: string;
+  dischargeReason?: string;
   createdAt?: string;
   updatedAt?: string;
   createdBy?: string; // ID del usuario que creó el paciente
@@ -27,6 +35,8 @@ export interface Medication {
   name: string;
   qty: number;
   expiresAt: string; // ISO
+  unit?: string;
+  dosage?: string;
   createdAt?: string;
   updatedAt?: string;
   createdBy?: string; // ID del usuario que creó el medicamento
@@ -35,8 +45,20 @@ export interface Medication {
   updatedByName?: string; // Nombre del usuario que actualizó
 }
 
+export interface PatientMedication {
+  id: ID;
+  patientId: ID;
+  medicationId: ID;
+  dosage: string; // dosis específica para este paciente
+  frequency: string; // cada 8 horas, 3 veces al día, etc.
+  prescribedAt: string; // fecha de prescripción
+  prescribedBy?: string; // doctor que prescribió
+}
+
 export interface EntryRequest {
   id: ID;
+  folio: string; // folio único para control
+  type: "entrada" | "salida"; // tipo de movimiento
   patientId: ID;
   createdAt: string;
   items: { medicationId: ID; qty: number }[];
@@ -55,7 +77,10 @@ export interface PersonalObject {
 export interface User {
   id: ID;
   name: string;
-  role: "admin" | "nurse" | "doctor" | "usuario";
+  role: "admin" | "nurse" | "doctor" | "usuario" | "reception";
   email?: string;
   createdAt?: string;
+  password?: string; // temporal, se enviará por correo
+  passwordChangeRequired?: boolean; // si debe cambiar contraseña
+  lastLogin?: string;
 }
