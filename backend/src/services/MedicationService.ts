@@ -4,13 +4,15 @@ import { query, queryOne, execute } from '../database/database';
 
 export class MedicationService {
   // Listar todos los medicamentos
-  async listMedications(): Promise<Medication[]> {
-    const medications = await query<Medication>(`
+  async listMedications(search?: string): Promise<Medication[]> {
+    let sql = `
       SELECT 
         m.id,
         m.name,
         m.qty,
         m.expires_at as expiresAt,
+        m.unit,
+        m.dosage,
         m.created_at as createdAt,
         m.updated_at as updatedAt,
         m.created_by as createdBy,
@@ -20,8 +22,22 @@ export class MedicationService {
       FROM medications m
       LEFT JOIN users u1 ON m.created_by = u1.id
       LEFT JOIN users u2 ON m.updated_by = u2.id
-      ORDER BY m.name ASC
-    `);
+    `;
+
+    const params: Record<string, any> = {};
+    if (search) {
+      sql += `
+        WHERE 
+          LOWER(m.name) LIKE @query
+          OR LOWER(m.unit) LIKE @query
+          OR LOWER(m.dosage) LIKE @query
+      `;
+      params.query = `%${search.toLowerCase()}%`;
+    }
+
+    sql += ' ORDER BY m.name ASC';
+
+    const medications = await query<Medication>(sql, params);
     return medications;
   }
 
@@ -33,6 +49,8 @@ export class MedicationService {
         m.name,
         m.qty,
         m.expires_at as expiresAt,
+        m.unit,
+        m.dosage,
         m.created_at as createdAt,
         m.updated_at as updatedAt,
         m.created_by as createdBy,
@@ -51,28 +69,21 @@ export class MedicationService {
   async createMedication(data: Omit<Medication, 'id' | 'createdAt' | 'updatedAt'> & { createdBy?: string }): Promise<Medication> {
     const id = uuidv4();
     const now = new Date().toISOString();
-    
-    // Validar que la caducidad no supere 3 meses
-    const expiresDate = new Date(data.expiresAt);
-    const nowDate = new Date();
-    const monthsDiff = (expiresDate.getTime() - nowDate.getTime()) / (1000 * 60 * 60 * 24 * 30);
-    
-    if (monthsDiff > 3) {
-      throw new Error('La caducidad supera los 3 meses');
-    }
-    
+
     if (data.qty < 0) {
       throw new Error('La cantidad debe ser mayor o igual a 0');
     }
     
     await execute(`
-      INSERT INTO medications (id, name, qty, expires_at, created_at, updated_at, created_by, updated_by)
-      VALUES (@id, @name, @qty, @expiresAt, @createdAt, @updatedAt, @createdBy, @updatedBy)
+      INSERT INTO medications (id, name, qty, expires_at, unit, dosage, created_at, updated_at, created_by, updated_by)
+      VALUES (@id, @name, @qty, @expiresAt, @unit, @dosage, @createdAt, @updatedAt, @createdBy, @updatedBy)
     `, {
       id,
       name: data.name,
       qty: data.qty,
       expiresAt: data.expiresAt,
+      unit: data.unit || null,
+      dosage: data.dosage || null,
       createdAt: now,
       updatedAt: now,
       createdBy: data.createdBy || null,
@@ -95,6 +106,8 @@ export class MedicationService {
       SET name = COALESCE(@name, name),
           qty = COALESCE(@qty, qty),
           expires_at = COALESCE(@expiresAt, expires_at),
+          unit = COALESCE(@unit, unit),
+          dosage = COALESCE(@dosage, dosage),
           updated_at = @updatedAt,
           updated_by = COALESCE(@updatedBy, updated_by)
       WHERE id = @id
@@ -102,6 +115,8 @@ export class MedicationService {
       name: data.name || null,
       qty: data.qty !== undefined ? data.qty : null,
       expiresAt: data.expiresAt || null,
+      unit: data.unit || null,
+      dosage: data.dosage || null,
       updatedAt: now,
       updatedBy: data.updatedBy || null,
       id

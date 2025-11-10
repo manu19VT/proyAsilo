@@ -6,8 +6,12 @@ const router = express.Router();
 // Listar pacientes
 router.get('/', async (req, res) => {
   try {
-    const query = req.query.q as string | undefined;
-    const patients = await patientService.listPatients(query);
+    const { q, status, contactName } = req.query as { q?: string; status?: string; contactName?: string };
+    const patients = await patientService.listPatients({
+      query: q,
+      status: status === 'activo' || status === 'baja' ? status : undefined,
+      contactName
+    });
     res.json(patients);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -30,7 +34,6 @@ router.get('/:id', async (req, res) => {
 // Crear paciente
 router.post('/', async (req, res) => {
   try {
-    // El frontend debe enviar userId en el body: { ..., userId: "..." }
     const patient = await patientService.createPatient({
       ...req.body,
       createdBy: req.body.userId || null
@@ -44,11 +47,39 @@ router.post('/', async (req, res) => {
 // Actualizar paciente
 router.put('/:id', async (req, res) => {
   try {
-    // El frontend debe enviar userId en el body: { ..., userId: "..." }
     const patient = await patientService.updatePatient(req.params.id, {
       ...req.body,
       updatedBy: req.body.userId || null
     });
+    if (!patient) {
+      return res.status(404).json({ error: 'Paciente no encontrado' });
+    }
+    res.json(patient);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.post('/:id/discharge', async (req, res) => {
+  try {
+    const { reason, userId } = req.body || {};
+    if (!reason || typeof reason !== 'string') {
+      return res.status(400).json({ error: 'reason es requerido' });
+    }
+    const patient = await patientService.dischargePatient(req.params.id, reason, userId);
+    if (!patient) {
+      return res.status(404).json({ error: 'Paciente no encontrado' });
+    }
+    res.json(patient);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.post('/:id/reactivate', async (req, res) => {
+  try {
+    const { userId } = req.body || {};
+    const patient = await patientService.reactivatePatient(req.params.id, userId);
     if (!patient) {
       return res.status(404).json({ error: 'Paciente no encontrado' });
     }

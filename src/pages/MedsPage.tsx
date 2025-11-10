@@ -1,102 +1,417 @@
-import { useEffect, useState } from "react";
-import { Box, TextField, Button, Alert, Chip, Typography, Stack, Paper } from "@mui/material";
+import { useEffect, useMemo, useState } from "react";
+import {
+  TextField,
+  Button,
+  Stack,
+  Typography,
+  Paper,
+  Chip,
+  Alert,
+  MenuItem,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
+} from "@mui/material";
+import {
+  Add as AddIcon,
+  Search as SearchIcon,
+  Warning as WarningIcon,
+  LocalPharmacy as PharmacyIcon
+} from "@mui/icons-material";
+import { AnimatePresence, motion } from "framer-motion";
 import Page from "../components/Page";
 import { Table } from "../components/Table";
 import { api } from "../api/client";
-import { Medication } from "../types";
-import { fmt, monthsUntil } from "../utils/date";
+import { Medication, Patient } from "../types";
 import { useAuth } from "../contexts/AuthContext";
 
 export default function MedsPage() {
   const { user } = useAuth();
   const [items, setItems] = useState<Medication[]>([]);
-  const [form, setForm] = useState({ name: "", qty: 1, expiresAt: "" });
-  const [error, setError] = useState<string | null>(null);
+  const [filteredItems, setFilteredItems] = useState<Medication[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
 
-  const load = async () => setItems(await api.listMeds());
-  useEffect(() => { load(); }, []);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [name, setName] = useState("");
+  const [qty, setQty] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
+  const [unit, setUnit] = useState("tabletas");
+  const [dosage, setDosage] = useState("");
 
-  const add = async () => {
-    setError(null);
-    try {
-      if (!form.name || !form.expiresAt) return;
-      const months = monthsUntil(form.expiresAt);
-      if (months > 3) throw new Error("La caducidad supera 3 meses.");
-      await api.addMed({ ...form, qty: Number(form.qty), userId: user?.id });
-      setForm({ name: "", qty: 1, expiresAt: "" });
-      load();
-    } catch (e:any) { setError(e.message); }
+  const [assignDialog, setAssignDialog] = useState(false);
+  const [selectedMed, setSelectedMed] = useState<Medication | null>(null);
+  const [selectedPatientId, setSelectedPatientId] = useState("");
+  const [patientDosage, setPatientDosage] = useState("");
+  const [frequency, setFrequency] = useState("");
+
+  const isExpired = useMemo(
+    () => (date: string) => new Date(date) < new Date(),
+    []
+  );
+
+  const isExpiringSoon = useMemo(
+    () => (date: string) => {
+      const expiry = new Date(date);
+      const now = new Date();
+      const threeMonthsFromNow = new Date(now);
+      threeMonthsFromNow.setMonth(now.getMonth() + 3);
+      return expiry >= now && expiry <= threeMonthsFromNow;
+    },
+    []
+  );
+
+  const getExpiryChip = (date: string) => {
+    if (isExpired(date)) {
+      return <Chip label="CADUCADO" color="error" size="small" icon={<WarningIcon />} />;
+    }
+    if (isExpiringSoon(date)) {
+      return <Chip label="Por caducar" color="warning" size="small" icon={<WarningIcon />} />;
+    }
+    return <Chip label="Vigente" color="success" size="small" />;
   };
+
+  const load = async () => {
+    try {
+      const [medications, activePatients] = await Promise.all([
+        api.listMeds(),
+        api.listPatients({ status: "activo" })
+      ]);
+      setItems(medications);
+      setFilteredItems(medications);
+      setPatients(activePatients);
+    } catch (error) {
+      console.error(error);
+      alert("Error al cargar medicamentos");
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) {
+      setFilteredItems(items);
+      return;
+    }
+    setFilteredItems(
+      items.filter(m =>
+        m.name.toLowerCase().includes(q) ||
+        m.unit?.toLowerCase().includes(q) ||
+        m.dosage?.toLowerCase().includes(q)
+      )
+    );
+  }, [items, searchQuery]);
+
+  const resetForm = () => {
+    setName("");
+    setQty("");
+    setExpiresAt("");
+    setUnit("tabletas");
+    setDosage("");
+    setShowForm(false);
+  };
+
+  const handleAddMedication = async () => {
+    if (!name.trim() || !qty || !expiresAt) {
+      alert("Completa todos los campos obligatorios");
+      return;
+    }
+    if (Number(qty) <= 0) {
+      alert("La cantidad debe ser mayor a 0");
+      return;
+    }
+    try {
+      await api.addMed({
+        name: name.trim(),
+        qty: Number(qty),
+        expiresAt,
+        unit: unit.trim() || undefined,
+        dosage: dosage.trim() || undefined,
+        userId: user?.id
+      });
+      resetForm();
+      load();
+    } catch (error) {
+      console.error(error);
+      alert("Error al agregar medicamento");
+    }
+  };
+
+  const openAssignDialog = (med: Medication) => {
+    setSelectedMed(med);
+    setSelectedPatientId("");
+    setPatientDosage("");
+    setFrequency("");
+    setAssignDialog(true);
+  };
+
+  const handleAssignMedication = async () => {
+    if (!selectedMed || !selectedPatientId || !patientDosage.trim() || !frequency.trim()) {
+      alert("Completa todos los campos");
+      return;
+    }
+    try {
+      await api.addPatientMedication({
+        patientId: selectedPatientId,
+        medicationId: selectedMed.id,
+        dosage: patientDosage.trim(),
+        frequency: frequency.trim(),
+        prescribedAt: new Date().toISOString(),
+        prescribedBy: user?.id
+      });
+      alert("Medicamento asignado correctamente");
+      setAssignDialog(false);
+      load();
+    } catch (error) {
+      console.error(error);
+      alert("Error al asignar medicamento");
+    }
+  };
+
+  const expiredCount = items.filter(m => isExpired(m.expiresAt)).length;
+  const expiringSoonCount = items.filter(m => !isExpired(m.expiresAt) && isExpiringSoon(m.expiresAt)).length;
 
   return (
     <Page>
-      <Typography variant="h5" gutterBottom>Medicamentos</Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+        <Typography variant="h5" fontWeight={700}>Medicamentos</Typography>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => setShowForm(!showForm)}
+        >
+          {showForm ? "Cancelar" : "Nuevo Medicamento"}
+        </Button>
+      </Stack>
 
-      {/* Tarjeta de formulario */}
+      {expiredCount > 0 && (
+        <Alert severity="error" icon={<WarningIcon />} sx={{ mb: 2 }}>
+          <Typography variant="body2" fontWeight={600}>
+            ¡Atención! Hay {expiredCount} medicamento(s) CADUCADO(S)
+          </Typography>
+        </Alert>
+      )}
+
+      {expiringSoonCount > 0 && (
+        <Alert severity="warning" icon={<WarningIcon />} sx={{ mb: 2 }}>
+          <Typography variant="body2" fontWeight={600}>
+            Hay {expiringSoonCount} medicamento(s) por caducar en los próximos 3 meses
+          </Typography>
+        </Alert>
+      )}
+
       <Paper sx={{ p: 2, mb: 2 }}>
-        {/* Fila responsive: en móvil columna, en desktop fila */}
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-          <TextField
-            fullWidth size="small" label="Nombre"
-            value={form.name} onChange={e=>setForm({...form, name:e.target.value})}
-          />
-          <TextField
-            fullWidth size="small" type="number" label="Cantidad"
-            value={form.qty} onChange={e=>setForm({...form, qty:+e.target.value})}
-            inputProps={{ min: 0 }}
-            sx={{ maxWidth: { sm: 160 } }}
-          />
-          <TextField
-            fullWidth size="small" type="date" label="Caducidad"
-            InputLabelProps={{ shrink: true }}
-            value={form.expiresAt} onChange={e=>setForm({...form, expiresAt:e.target.value})}
-            sx={{ maxWidth: { sm: 220 } }}
-          />
-          <Button variant="contained" onClick={add} sx={{ height: 40 }}>
-            Agregar
-          </Button>
-        </Stack>
-
-        {error && <Alert severity="error" sx={{ mt: 1.5 }}>{error}</Alert>}
+        <Typography variant="subtitle2" gutterBottom>Buscar medicamento</Typography>
+        <TextField
+          placeholder="Buscar por nombre, unidad o dosis..."
+          size="small"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          fullWidth
+          InputProps={{
+            startAdornment: <SearchIcon sx={{ mr: 1, color: "text.secondary" }} />
+          }}
+        />
       </Paper>
 
-      {/* Tabla de medicamentos */}
-      <Box>
-        <Table headers={["Nombre","Cantidad","Caducidad","Regla","Creado por","Actualizado por"]}>
-          {items.map(m => {
-            const ok = monthsUntil(m.expiresAt) <= 3;
-            return (
-              <tr key={m.id}>
-                <td style={{ padding: 8 }}>{m.name}</td>
-                <td style={{ padding: 8 }}>{m.qty}</td>
-                <td style={{ padding: 8 }}>{fmt(m.expiresAt)}</td>
-                <td style={{ padding: 8 }}>
-                  <Chip
-                    size="small"
-                    color={ok ? "success" : "error"}
-                    variant={ok ? "outlined" : "filled"}
-                    label={ok ? "✔ Permitido" : "❌ > 3 meses"}
-                  />
-                </td>
-                <td style={{ padding: 8 }}>
-                  {m.createdByName ? (
-                    <Chip label={m.createdByName} size="small" color="primary" variant="outlined" />
-                  ) : (
-                    <Typography variant="caption" color="text.secondary">-</Typography>
-                  )}
-                </td>
-                <td style={{ padding: 8 }}>
-                  {m.updatedByName ? (
-                    <Chip label={m.updatedByName} size="small" color="secondary" variant="outlined" />
-                  ) : (
-                    <Typography variant="caption" color="text.secondary">-</Typography>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </Table>
-      </Box>
+      {showForm && (
+        <Paper sx={{ p: 2, mb: 2 }}>
+          <Typography variant="h6" gutterBottom>Nuevo Medicamento</Typography>
+          <Stack spacing={2}>
+            <TextField
+              label="Nombre del medicamento *"
+              size="small"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              fullWidth
+              placeholder="Ej: Paracetamol, Ibuprofeno, etc."
+            />
+
+            <Stack direction="row" spacing={2}>
+              <TextField
+                label="Cantidad *"
+                type="number"
+                size="small"
+                value={qty}
+                onChange={(e) => setQty(e.target.value)}
+                fullWidth
+                inputProps={{ min: 1 }}
+              />
+
+              <TextField
+                label="Unidad *"
+                select
+                size="small"
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+                fullWidth
+              >
+                <MenuItem value="tabletas">Tabletas</MenuItem>
+                <MenuItem value="cápsulas">Cápsulas</MenuItem>
+                <MenuItem value="ml">ml (mililitros)</MenuItem>
+                <MenuItem value="mg">mg (miligramos)</MenuItem>
+                <MenuItem value="g">g (gramos)</MenuItem>
+                <MenuItem value="ampolletas">Ampolletas</MenuItem>
+                <MenuItem value="sobres">Sobres</MenuItem>
+                <MenuItem value="frascos">Frascos</MenuItem>
+                <MenuItem value="cajas">Cajas</MenuItem>
+              </TextField>
+            </Stack>
+
+            <TextField
+              label="Fecha de caducidad *"
+              type="date"
+              size="small"
+              value={expiresAt}
+              onChange={(e) => setExpiresAt(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+              helperText="Se alertará cuando falten 3 meses o menos para caducar"
+            />
+
+            <TextField
+              label="Dosis recomendada"
+              size="small"
+              value={dosage}
+              onChange={(e) => setDosage(e.target.value)}
+              fullWidth
+              placeholder="Ej: 500mg, 10ml, 1 tableta, etc."
+            />
+
+            <Stack direction="row" spacing={2}>
+              <Button variant="outlined" onClick={resetForm} fullWidth>
+                Cancelar
+              </Button>
+              <Button
+                variant="contained"
+                onClick={handleAddMedication}
+                disabled={!name.trim() || !qty || !expiresAt}
+                fullWidth
+              >
+                Guardar Medicamento
+              </Button>
+            </Stack>
+          </Stack>
+        </Paper>
+      )}
+
+      <Typography variant="body2" color="text.secondary" mb={1}>
+        Mostrando {filteredItems.length} de {items.length} medicamentos
+      </Typography>
+
+      <Table headers={["Medicamento", "Cantidad", "Unidad", "Dosis", "Caducidad", "Estado", "Acciones"]}>
+        <AnimatePresence initial={false}>
+          {filteredItems.map(med => (
+            <motion.tr
+              key={med.id}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.25 }}
+            >
+              <td style={{ padding: 8, fontWeight: 600 }}>{med.name}</td>
+              <td style={{ padding: 8 }}>{med.qty}</td>
+              <td style={{ padding: 8 }}>{med.unit || "-"}</td>
+              <td style={{ padding: 8, fontSize: 12 }}>{med.dosage || "-"}</td>
+              <td style={{ padding: 8, fontSize: 12 }}>
+                {new Date(med.expiresAt).toLocaleDateString()}
+              </td>
+              <td style={{ padding: 8 }}>{getExpiryChip(med.expiresAt)}</td>
+              <td style={{ padding: 8 }}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<PharmacyIcon />}
+                  onClick={() => openAssignDialog(med)}
+                  disabled={isExpired(med.expiresAt)}
+                >
+                  Recetar
+                </Button>
+              </td>
+            </motion.tr>
+          ))}
+        </AnimatePresence>
+      </Table>
+
+      {filteredItems.length === 0 && (
+        <Alert severity="info" sx={{ mt: 2 }}>
+          No se encontraron medicamentos.
+        </Alert>
+      )}
+
+      <Dialog
+        open={assignDialog}
+        onClose={() => setAssignDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <PharmacyIcon color="primary" />
+            <span>Recetar medicamento a paciente</span>
+          </Stack>
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Alert severity="info">
+              Medicamento: <strong>{selectedMed?.name}</strong>
+              <br />
+              Disponible: <strong>{selectedMed?.qty} {selectedMed?.unit || ""}</strong>
+            </Alert>
+            <TextField
+              label="Seleccionar paciente *"
+              select
+              size="small"
+              value={selectedPatientId}
+              onChange={(e) => setSelectedPatientId(e.target.value)}
+              fullWidth
+            >
+              {patients.map(p => (
+                <MenuItem key={p.id} value={p.id}>
+                  {p.name} {p.age ? `(${p.age} años)` : ""}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              label="Dosis para este paciente *"
+              size="small"
+              value={patientDosage}
+              onChange={(e) => setPatientDosage(e.target.value)}
+              fullWidth
+              placeholder="Ej: 500mg, 1 tableta, 10ml, etc."
+              helperText={selectedMed?.dosage ? `Dosis recomendada: ${selectedMed.dosage}` : undefined}
+            />
+            <TextField
+              label="Frecuencia *"
+              size="small"
+              value={frequency}
+              onChange={(e) => setFrequency(e.target.value)}
+              fullWidth
+              placeholder="Ej: Cada 8 horas, 3 veces al día"
+            />
+            <Alert severity="warning">
+              <Typography variant="caption">
+                Esta receta quedará registrada en el historial del paciente.
+              </Typography>
+            </Alert>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAssignDialog(false)}>Cancelar</Button>
+          <Button
+            variant="contained"
+            onClick={handleAssignMedication}
+            disabled={!selectedPatientId || !patientDosage.trim() || !frequency.trim()}
+          >
+            Confirmar Receta
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Page>
   );
 }
