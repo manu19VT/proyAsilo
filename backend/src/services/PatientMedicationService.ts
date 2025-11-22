@@ -7,19 +7,19 @@ export class PatientMedicationService {
     const rows = await query<any>(`
       SELECT 
         pm.id,
-        pm.patient_id as patientId,
-        pm.medication_id as medicationId,
-        pm.dosage,
-        pm.frequency,
-        pm.prescribed_at as prescribedAt,
-        pm.prescribed_by as prescribedBy,
-        m.name as medicationName,
-        m.unit as medicationUnit,
-        m.dosage as medicationDosage
+        pm.paciente_id as patientId,
+        pm.medicamento_id as medicationId,
+        pm.dosis as dosage,
+        pm.frecuencia as frequency,
+        pm.fecha_prescripcion as prescribedAt,
+        pm.prescrito_por as prescribedBy,
+        m.nombre as medicationName,
+        m.unidad as medicationUnit,
+        m.dosis as medicationDosage
       FROM patient_medications pm
-      LEFT JOIN medications m ON pm.medication_id = m.id
-      WHERE pm.patient_id = @patientId
-      ORDER BY pm.prescribed_at DESC
+      LEFT JOIN medications m ON pm.medicamento_id = m.id
+      WHERE pm.paciente_id = @patientId
+      ORDER BY pm.fecha_prescripcion DESC
     `, { patientId });
 
     return rows.map(row => ({
@@ -40,7 +40,7 @@ export class PatientMedicationService {
     const id = uuidv4();
     await execute(`
       INSERT INTO patient_medications (
-        id, patient_id, medication_id, dosage, frequency, prescribed_at, prescribed_by
+        id, paciente_id, medicamento_id, dosis, frecuencia, fecha_prescripcion, prescrito_por
       ) VALUES (
         @id, @patientId, @medicationId, @dosage, @frequency, @prescribedAt, @prescribedBy
       )
@@ -57,17 +57,17 @@ export class PatientMedicationService {
     const row = await queryOne<any>(`
       SELECT 
         pm.id,
-        pm.patient_id as patientId,
-        pm.medication_id as medicationId,
-        pm.dosage,
-        pm.frequency,
-        pm.prescribed_at as prescribedAt,
-        pm.prescribed_by as prescribedBy,
-        m.name as medicationName,
-        m.unit as medicationUnit,
-        m.dosage as medicationDosage
+        pm.paciente_id as patientId,
+        pm.medicamento_id as medicationId,
+        pm.dosis as dosage,
+        pm.frecuencia as frequency,
+        pm.fecha_prescripcion as prescribedAt,
+        pm.prescrito_por as prescribedBy,
+        m.nombre as medicationName,
+        m.unidad as medicationUnit,
+        m.dosis as medicationDosage
       FROM patient_medications pm
-      LEFT JOIN medications m ON pm.medication_id = m.id
+      LEFT JOIN medications m ON pm.medicamento_id = m.id
       WHERE pm.id = @id
     `, { id });
 

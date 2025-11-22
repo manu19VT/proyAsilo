@@ -11,7 +11,15 @@
     "migrate-simple": "ts-node src/database/migrateSimple.ts",
     "migrate-audit": "ts-node src/database/addAuditFields.ts",
     "migrate-role": "ts-node src/database/updateUserRole.ts",
-    "check-tables": "ts-node src/database/checkTables.ts"
+    "check-tables": "ts-node src/database/checkTables.ts",
+    "fix-users": "ts-node src/database/run-fix-script.ts",
+    "fix-all": "ts-node src/database/fix-all-tables.ts",
+    "create-admin": "ts-node src/database/create-admin.ts",
+    "verify-data": "ts-node src/database/verify-data.ts",
+    "test-patients": "ts-node src/database/test-patients.ts",
+    "fix-patients": "ts-node src/database/fix-patients-all.ts",
+    "reset-db": "ts-node src/database/reset-database.ts",
+    "create-fresh": "ts-node src/database/create-fresh-schema.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",

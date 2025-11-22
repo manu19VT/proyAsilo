@@ -53,41 +53,41 @@ export class PatientService {
     let sql = `
       SELECT 
         p.id,
-        p.name,
-        p.birth_date as birthDate,
-        p.birth_place as birthPlace,
-        p.age,
-        p.address as address,
+        p.nombre as name,
+        p.fecha_nacimiento as birthDate,
+        p.lugar_nacimiento as birthPlace,
+        p.edad as age,
+        p.direccion as address,
         p.curp,
         p.rfc,
-        p.admission_date as admissionDate,
-        p.notes,
-        p.status,
-        p.discharge_date as dischargeDate,
-        p.discharge_reason as dischargeReason,
-        p.created_at as createdAt,
-        p.updated_at as updatedAt,
-        p.created_by as createdBy,
-        p.updated_by as updatedBy,
-        u1.name as createdByName,
-        u2.name as updatedByName
+        p.fecha_ingreso as admissionDate,
+        p.notas as notes,
+        p.estado as status,
+        p.fecha_baja as dischargeDate,
+        p.motivo_baja as dischargeReason,
+        p.fecha_creacion as createdAt,
+        p.fecha_actualizacion as updatedAt,
+        p.creado_por as createdBy,
+        p.actualizado_por as updatedBy,
+        u1.nombre as createdByName,
+        u2.nombre as updatedByName
       FROM patients p
-      LEFT JOIN users u1 ON p.created_by = u1.id
-      LEFT JOIN users u2 ON p.updated_by = u2.id
+      LEFT JOIN users u1 ON p.creado_por = u1.id
+      LEFT JOIN users u2 ON p.actualizado_por = u2.id
     `;
 
     const conditions: string[] = [];
     const params: Record<string, any> = {};
 
     if (filters?.status) {
-      conditions.push('p.status = @status');
+      conditions.push('p.estado = @status');
       params.status = filters.status;
     }
 
     if (filters?.query) {
       conditions.push(`
         (
-          LOWER(p.name) LIKE @query
+          LOWER(p.nombre) LIKE @query
           OR LOWER(p.id) LIKE @query
           OR LOWER(p.curp) LIKE @query
           OR LOWER(p.rfc) LIKE @query
@@ -101,10 +101,10 @@ export class PatientService {
         EXISTS (
           SELECT 1 
           FROM contacts c
-          WHERE c.patient_id = p.id 
+          WHERE c.paciente_id = p.id 
             AND (
-              LOWER(c.name) LIKE @contactQuery
-              OR c.phone LIKE @contactPhone
+              LOWER(c.nombre) LIKE @contactQuery
+              OR c.telefono LIKE @contactPhone
               OR LOWER(c.rfc) LIKE @contactQuery
             )
         )
@@ -117,7 +117,7 @@ export class PatientService {
       sql += ` WHERE ${conditions.join(' AND ')}`;
     }
 
-    sql += ' ORDER BY p.name ASC';
+    sql += ' ORDER BY p.nombre ASC';
 
     const rows = await query<any>(sql, params);
     const patients = await Promise.all(rows.map(async (row) => {
@@ -134,27 +134,27 @@ export class PatientService {
     const row = await queryOne<any>(`
       SELECT 
         p.id,
-        p.name,
-        p.birth_date as birthDate,
-        p.birth_place as birthPlace,
-        p.age,
-        p.address as address,
+        p.nombre as name,
+        p.fecha_nacimiento as birthDate,
+        p.lugar_nacimiento as birthPlace,
+        p.edad as age,
+        p.direccion as address,
         p.curp,
         p.rfc,
-        p.admission_date as admissionDate,
-        p.notes,
-        p.status,
-        p.discharge_date as dischargeDate,
-        p.discharge_reason as dischargeReason,
-        p.created_at as createdAt,
-        p.updated_at as updatedAt,
-        p.created_by as createdBy,
-        p.updated_by as updatedBy,
-        u1.name as createdByName,
-        u2.name as updatedByName
+        p.fecha_ingreso as admissionDate,
+        p.notas as notes,
+        p.estado as status,
+        p.fecha_baja as dischargeDate,
+        p.motivo_baja as dischargeReason,
+        p.fecha_creacion as createdAt,
+        p.fecha_actualizacion as updatedAt,
+        p.creado_por as createdBy,
+        p.actualizado_por as updatedBy,
+        u1.nombre as createdByName,
+        u2.nombre as updatedByName
       FROM patients p
-      LEFT JOIN users u1 ON p.created_by = u1.id
-      LEFT JOIN users u2 ON p.updated_by = u2.id
+      LEFT JOIN users u1 ON p.creado_por = u1.id
+      LEFT JOIN users u2 ON p.actualizado_por = u2.id
       WHERE p.id = @id
     `, { id });
     
@@ -173,8 +173,8 @@ export class PatientService {
 
     await execute(`
       INSERT INTO patients (
-        id, name, birth_date, birth_place, age, address, curp, rfc, admission_date, notes, status, discharge_date, discharge_reason,
-        created_at, updated_at, created_by, updated_by
+        id, nombre, fecha_nacimiento, lugar_nacimiento, edad, direccion, curp, rfc, fecha_ingreso, notas, estado, fecha_baja, motivo_baja,
+        fecha_creacion, fecha_actualizacion, creado_por, actualizado_por
       )
       VALUES (
         @id, @name, @birthDate, @birthPlace, @age, @address, @curp, @rfc, @admissionDate, @notes, @status, NULL, NULL,
@@ -224,20 +224,20 @@ export class PatientService {
 
     await execute(`
       UPDATE patients 
-      SET name = COALESCE(@name, name),
-          birth_date = COALESCE(@birthDate, birth_date),
-          birth_place = COALESCE(@birthPlace, birth_place),
-          age = COALESCE(@age, age),
-          address = COALESCE(@address, address),
+      SET nombre = COALESCE(@name, nombre),
+          fecha_nacimiento = COALESCE(@birthDate, fecha_nacimiento),
+          lugar_nacimiento = COALESCE(@birthPlace, lugar_nacimiento),
+          edad = COALESCE(@age, edad),
+          direccion = COALESCE(@address, direccion),
           curp = COALESCE(@curp, curp),
           rfc = COALESCE(@rfc, rfc),
-          admission_date = COALESCE(@admissionDate, admission_date),
-          notes = COALESCE(@notes, notes),
-          status = COALESCE(@status, status),
-          discharge_date = COALESCE(@dischargeDate, discharge_date),
-          discharge_reason = COALESCE(@dischargeReason, discharge_reason),
-          updated_at = @updatedAt,
-          updated_by = COALESCE(@updatedBy, updated_by)
+          fecha_ingreso = COALESCE(@admissionDate, fecha_ingreso),
+          notas = COALESCE(@notes, notas),
+          estado = COALESCE(@status, estado),
+          fecha_baja = COALESCE(@dischargeDate, fecha_baja),
+          motivo_baja = COALESCE(@dischargeReason, motivo_baja),
+          fecha_actualizacion = @updatedAt,
+          actualizado_por = COALESCE(@updatedBy, actualizado_por)
       WHERE id = @id
     `, {
       name: data.name || null,
@@ -259,7 +259,7 @@ export class PatientService {
     
     if (data.contacts) {
       // Eliminar contactos actuales y recrear (simplificación)
-      await execute('DELETE FROM contacts WHERE patient_id = @id', { id });
+      await execute('DELETE FROM contacts WHERE paciente_id = @id', { id });
       for (const contact of data.contacts) {
         await this.createContact({
           patientId: id,
@@ -280,11 +280,11 @@ export class PatientService {
     const now = new Date().toISOString();
     await execute(`
       UPDATE patients
-      SET status = 'baja',
-          discharge_reason = @reason,
-          discharge_date = @dischargeDate,
-          updated_at = @updatedAt,
-          updated_by = COALESCE(@userId, updated_by)
+      SET estado = 'baja',
+          motivo_baja = @reason,
+          fecha_baja = @dischargeDate,
+          fecha_actualizacion = @updatedAt,
+          actualizado_por = COALESCE(@userId, actualizado_por)
       WHERE id = @id
     `, {
       id,
@@ -300,11 +300,11 @@ export class PatientService {
     const now = new Date().toISOString();
     await execute(`
       UPDATE patients
-      SET status = 'activo',
-          discharge_reason = NULL,
-          discharge_date = NULL,
-          updated_at = @updatedAt,
-          updated_by = COALESCE(@userId, updated_by)
+      SET estado = 'activo',
+          motivo_baja = NULL,
+          fecha_baja = NULL,
+          fecha_actualizacion = @updatedAt,
+          actualizado_por = COALESCE(@userId, actualizado_por)
       WHERE id = @id
     `, {
       id,
@@ -325,16 +325,16 @@ export class PatientService {
     const contacts = await query<Contact>(`
       SELECT 
         id,
-        patient_id as patientId,
-        name,
-        phone,
-        relation,
+        paciente_id as patientId,
+        nombre as name,
+        telefono as phone,
+        relacion as relation,
         rfc,
-        age,
-        address
+        edad as age,
+        direccion as address
       FROM contacts 
-      WHERE patient_id = @patientId
-      ORDER BY name ASC
+      WHERE paciente_id = @patientId
+      ORDER BY nombre ASC
     `, { patientId });
     return contacts;
   }
@@ -344,7 +344,7 @@ export class PatientService {
     const id = uuidv4();
     
     await execute(`
-      INSERT INTO contacts (id, patient_id, name, phone, relation, rfc, age, address, created_at)
+      INSERT INTO contacts (id, paciente_id, nombre, telefono, relacion, rfc, edad, direccion, fecha_creacion)
       VALUES (@id, @patientId, @name, @phone, @relation, @rfc, @age, @address, @createdAt)
     `, {
       id,
@@ -368,12 +368,12 @@ export class PatientService {
     
     await execute(`
       UPDATE contacts 
-      SET name = COALESCE(@name, name),
-          phone = COALESCE(@phone, phone),
-          relation = COALESCE(@relation, relation),
+      SET nombre = COALESCE(@name, nombre),
+          telefono = COALESCE(@phone, telefono),
+          relacion = COALESCE(@relation, relacion),
           rfc = COALESCE(@rfc, rfc),
-          age = COALESCE(@age, age),
-          address = COALESCE(@address, address)
+          edad = COALESCE(@age, edad),
+          direccion = COALESCE(@address, direccion)
       WHERE id = @id
     `, {
       name: data.name || null,
@@ -385,7 +385,7 @@ export class PatientService {
       id
     });
     
-    const contacts = await this.getContactsByPatientId(existing.patient_id);
+    const contacts = await this.getContactsByPatientId(existing.paciente_id);
     return contacts.find(c => c.id === id) || null;
   }
 
