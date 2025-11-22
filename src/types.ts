@@ -57,6 +57,7 @@ export interface PatientMedication {
   frequency: string; // cada 8 horas, 3 veces al día, etc.
   prescribedAt: string; // fecha de prescripción
   prescribedBy?: string; // doctor que prescribió
+  cantidad?: number; // cantidad entregada al paciente
   medicationName?: string;
   medicationUnit?: string;
   medicationDosage?: string;
@@ -68,7 +69,13 @@ export interface EntryRequest {
   type: "entrada" | "salida"; // tipo de movimiento
   patientId: ID;
   createdAt: string;
-  items: { medicationId: ID; qty: number }[];
+  items: { 
+    medicationId: ID; 
+    qty: number;
+    dosisRecomendada?: string; // dosis recomendada (solo para salidas)
+    frecuencia?: string; // cada cuándo tomar (solo para salidas)
+    fechaCaducidad?: string; // fecha de caducidad del medicamento (solo para salidas)
+  }[];
   status: "completa" | "incompleta";
   dueDate?: string; // fecha para volver
 }

@@ -45,7 +45,7 @@ router.get('/:id', async (req, res) => {
 // Crear solicitud
 router.post('/', async (req, res) => {
   try {
-    const { type, patientId, items, status, dueDate } = req.body || {};
+    const { type, patientId, items, status, dueDate, userId } = req.body || {};
     if (!type || (type !== 'entrada' && type !== 'salida')) {
       return res.status(400).json({ error: 'type debe ser "entrada" o "salida"' });
     }
@@ -61,7 +61,8 @@ router.post('/', async (req, res) => {
       patientId,
       items,
       status: status || 'completa',
-      dueDate
+      dueDate,
+      userId
     });
     res.status(201).json(entryRequest);
   } catch (error: any) {

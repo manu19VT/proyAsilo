@@ -7,30 +7,24 @@ import {
   Paper,
   Chip,
   Alert,
-  MenuItem,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions
+  MenuItem
 } from "@mui/material";
 import {
   Add as AddIcon,
   Search as SearchIcon,
-  Warning as WarningIcon,
-  LocalPharmacy as PharmacyIcon
+  Warning as WarningIcon
 } from "@mui/icons-material";
 import { AnimatePresence, motion } from "framer-motion";
 import Page from "../components/Page";
 import { Table } from "../components/Table";
 import { api } from "../api/client";
-import { Medication, Patient } from "../types";
+import { Medication } from "../types";
 import { useAuth } from "../contexts/AuthContext";
 
 export default function MedsPage() {
   const { user } = useAuth();
   const [items, setItems] = useState<Medication[]>([]);
   const [filteredItems, setFilteredItems] = useState<Medication[]>([]);
-  const [patients, setPatients] = useState<Patient[]>([]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -40,11 +34,6 @@ export default function MedsPage() {
   const [unit, setUnit] = useState("tabletas");
   const [dosage, setDosage] = useState("");
 
-  const [assignDialog, setAssignDialog] = useState(false);
-  const [selectedMed, setSelectedMed] = useState<Medication | null>(null);
-  const [selectedPatientId, setSelectedPatientId] = useState("");
-  const [patientDosage, setPatientDosage] = useState("");
-  const [frequency, setFrequency] = useState("");
 
   const isExpired = useMemo(
     () => (date: string) => new Date(date) < new Date(),
@@ -74,13 +63,9 @@ export default function MedsPage() {
 
   const load = async () => {
     try {
-      const [medications, activePatients] = await Promise.all([
-        api.listMeds(),
-        api.listPatients({ status: "activo" })
-      ]);
+      const medications = await api.listMeds();
       setItems(medications);
       setFilteredItems(medications);
-      setPatients(activePatients);
     } catch (error) {
       console.error(error);
       alert("Error al cargar medicamentos");
@@ -111,7 +96,7 @@ export default function MedsPage() {
     setName("");
     setQty("");
     setExpiresAt("");
-    setUnit("tabletas");
+    setUnit("ampolletas");
     setDosage("");
     setShowForm(false);
   };
@@ -142,36 +127,6 @@ export default function MedsPage() {
     }
   };
 
-  const openAssignDialog = (med: Medication) => {
-    setSelectedMed(med);
-    setSelectedPatientId("");
-    setPatientDosage("");
-    setFrequency("");
-    setAssignDialog(true);
-  };
-
-  const handleAssignMedication = async () => {
-    if (!selectedMed || !selectedPatientId || !patientDosage.trim() || !frequency.trim()) {
-      alert("Completa todos los campos");
-      return;
-    }
-    try {
-      await api.addPatientMedication({
-        patientId: selectedPatientId,
-        medicationId: selectedMed.id,
-        dosage: patientDosage.trim(),
-        frequency: frequency.trim(),
-        prescribedAt: new Date().toISOString(),
-        prescribedBy: user?.id
-      });
-      alert("Medicamento asignado correctamente");
-      setAssignDialog(false);
-      load();
-    } catch (error) {
-      console.error(error);
-      alert("Error al asignar medicamento");
-    }
-  };
 
   const expiredCount = items.filter(m => isExpired(m.expiresAt)).length;
   const expiringSoonCount = items.filter(m => !isExpired(m.expiresAt) && isExpiringSoon(m.expiresAt)).length;
@@ -251,11 +206,6 @@ export default function MedsPage() {
                 onChange={(e) => setUnit(e.target.value)}
                 fullWidth
               >
-                <MenuItem value="tabletas">Tabletas</MenuItem>
-                <MenuItem value="cápsulas">Cápsulas</MenuItem>
-                <MenuItem value="ml">ml (mililitros)</MenuItem>
-                <MenuItem value="mg">mg (miligramos)</MenuItem>
-                <MenuItem value="g">g (gramos)</MenuItem>
                 <MenuItem value="ampolletas">Ampolletas</MenuItem>
                 <MenuItem value="sobres">Sobres</MenuItem>
                 <MenuItem value="frascos">Frascos</MenuItem>
@@ -304,7 +254,7 @@ export default function MedsPage() {
         Mostrando {filteredItems.length} de {items.length} medicamentos
       </Typography>
 
-      <Table headers={["Medicamento", "Cantidad", "Unidad", "Dosis", "Caducidad", "Estado", "Acciones"]}>
+      <Table headers={["Medicamento", "Cantidad", "Unidad", "Dosis", "Caducidad", "Estado"]}>
         <AnimatePresence initial={false}>
           {filteredItems.map(med => (
             <motion.tr
@@ -322,17 +272,6 @@ export default function MedsPage() {
                 {new Date(med.expiresAt).toLocaleDateString()}
               </td>
               <td style={{ padding: 8 }}>{getExpiryChip(med.expiresAt)}</td>
-              <td style={{ padding: 8 }}>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  startIcon={<PharmacyIcon />}
-                  onClick={() => openAssignDialog(med)}
-                  disabled={isExpired(med.expiresAt)}
-                >
-                  Recetar
-                </Button>
-              </td>
             </motion.tr>
           ))}
         </AnimatePresence>
@@ -343,75 +282,6 @@ export default function MedsPage() {
           No se encontraron medicamentos.
         </Alert>
       )}
-
-      <Dialog
-        open={assignDialog}
-        onClose={() => setAssignDialog(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>
-          <Stack direction="row" alignItems="center" spacing={1}>
-            <PharmacyIcon color="primary" />
-            <span>Recetar medicamento a paciente</span>
-          </Stack>
-        </DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <Alert severity="info">
-              Medicamento: <strong>{selectedMed?.name}</strong>
-              <br />
-              Disponible: <strong>{selectedMed?.qty} {selectedMed?.unit || ""}</strong>
-            </Alert>
-            <TextField
-              label="Seleccionar paciente *"
-              select
-              size="small"
-              value={selectedPatientId}
-              onChange={(e) => setSelectedPatientId(e.target.value)}
-              fullWidth
-            >
-              {patients.map(p => (
-                <MenuItem key={p.id} value={p.id}>
-                  {p.name} {p.age ? `(${p.age} años)` : ""}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              label="Dosis para este paciente *"
-              size="small"
-              value={patientDosage}
-              onChange={(e) => setPatientDosage(e.target.value)}
-              fullWidth
-              placeholder="Ej: 500mg, 1 tableta, 10ml, etc."
-              helperText={selectedMed?.dosage ? `Dosis recomendada: ${selectedMed.dosage}` : undefined}
-            />
-            <TextField
-              label="Frecuencia *"
-              size="small"
-              value={frequency}
-              onChange={(e) => setFrequency(e.target.value)}
-              fullWidth
-              placeholder="Ej: Cada 8 horas, 3 veces al día"
-            />
-            <Alert severity="warning">
-              <Typography variant="caption">
-                Esta receta quedará registrada en el historial del paciente.
-              </Typography>
-            </Alert>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setAssignDialog(false)}>Cancelar</Button>
-          <Button
-            variant="contained"
-            onClick={handleAssignMedication}
-            disabled={!selectedPatientId || !patientDosage.trim() || !frequency.trim()}
-          >
-            Confirmar Receta
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Page>
   );
 }
