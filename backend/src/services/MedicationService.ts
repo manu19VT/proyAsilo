@@ -8,34 +8,34 @@ export class MedicationService {
     let sql = `
       SELECT 
         m.id,
-        m.name,
-        m.qty,
-        m.expires_at as expiresAt,
-        m.unit,
-        m.dosage,
-        m.created_at as createdAt,
-        m.updated_at as updatedAt,
-        m.created_by as createdBy,
-        m.updated_by as updatedBy,
-        u1.name as createdByName,
-        u2.name as updatedByName
+        m.nombre as name,
+        m.cantidad as qty,
+        m.fecha_vencimiento as expiresAt,
+        m.unidad as unit,
+        m.dosis as dosage,
+        m.fecha_creacion as createdAt,
+        m.fecha_actualizacion as updatedAt,
+        m.creado_por as createdBy,
+        m.actualizado_por as updatedBy,
+        u1.nombre as createdByName,
+        u2.nombre as updatedByName
       FROM medications m
-      LEFT JOIN users u1 ON m.created_by = u1.id
-      LEFT JOIN users u2 ON m.updated_by = u2.id
+      LEFT JOIN users u1 ON m.creado_por = u1.id
+      LEFT JOIN users u2 ON m.actualizado_por = u2.id
     `;
 
     const params: Record<string, any> = {};
     if (search) {
       sql += `
         WHERE 
-          LOWER(m.name) LIKE @query
-          OR LOWER(m.unit) LIKE @query
-          OR LOWER(m.dosage) LIKE @query
+          LOWER(m.nombre) LIKE @query
+          OR LOWER(m.unidad) LIKE @query
+          OR LOWER(m.dosis) LIKE @query
       `;
       params.query = `%${search.toLowerCase()}%`;
     }
 
-    sql += ' ORDER BY m.name ASC';
+    sql += ' ORDER BY m.nombre ASC';
 
     const medications = await query<Medication>(sql, params);
     return medications;
@@ -46,20 +46,20 @@ export class MedicationService {
     const medication = await queryOne<Medication>(`
       SELECT 
         m.id,
-        m.name,
-        m.qty,
-        m.expires_at as expiresAt,
-        m.unit,
-        m.dosage,
-        m.created_at as createdAt,
-        m.updated_at as updatedAt,
-        m.created_by as createdBy,
-        m.updated_by as updatedBy,
-        u1.name as createdByName,
-        u2.name as updatedByName
+        m.nombre as name,
+        m.cantidad as qty,
+        m.fecha_vencimiento as expiresAt,
+        m.unidad as unit,
+        m.dosis as dosage,
+        m.fecha_creacion as createdAt,
+        m.fecha_actualizacion as updatedAt,
+        m.creado_por as createdBy,
+        m.actualizado_por as updatedBy,
+        u1.nombre as createdByName,
+        u2.nombre as updatedByName
       FROM medications m
-      LEFT JOIN users u1 ON m.created_by = u1.id
-      LEFT JOIN users u2 ON m.updated_by = u2.id
+      LEFT JOIN users u1 ON m.creado_por = u1.id
+      LEFT JOIN users u2 ON m.actualizado_por = u2.id
       WHERE m.id = @id
     `, { id });
     return medication;
@@ -75,7 +75,7 @@ export class MedicationService {
     }
     
     await execute(`
-      INSERT INTO medications (id, name, qty, expires_at, unit, dosage, created_at, updated_at, created_by, updated_by)
+      INSERT INTO medications (id, nombre, cantidad, fecha_vencimiento, unidad, dosis, fecha_creacion, fecha_actualizacion, creado_por, actualizado_por)
       VALUES (@id, @name, @qty, @expiresAt, @unit, @dosage, @createdAt, @updatedAt, @createdBy, @updatedBy)
     `, {
       id,
@@ -103,13 +103,13 @@ export class MedicationService {
     
     await execute(`
       UPDATE medications 
-      SET name = COALESCE(@name, name),
-          qty = COALESCE(@qty, qty),
-          expires_at = COALESCE(@expiresAt, expires_at),
-          unit = COALESCE(@unit, unit),
-          dosage = COALESCE(@dosage, dosage),
-          updated_at = @updatedAt,
-          updated_by = COALESCE(@updatedBy, updated_by)
+      SET nombre = COALESCE(@name, nombre),
+          cantidad = COALESCE(@qty, cantidad),
+          fecha_vencimiento = COALESCE(@expiresAt, fecha_vencimiento),
+          unidad = COALESCE(@unit, unidad),
+          dosis = COALESCE(@dosage, dosis),
+          fecha_actualizacion = @updatedAt,
+          actualizado_por = COALESCE(@updatedBy, actualizado_por)
       WHERE id = @id
     `, {
       name: data.name || null,

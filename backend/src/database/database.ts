@@ -118,12 +118,24 @@ export async function initDatabase(): Promise<void> {
               errorMsg.includes('There is already an object named') ||
               errorMsg.includes('already exists') ||
               errorMsg.includes('Duplicate key name') ||
-              (errorMsg.includes('Cannot find the object') && cleanCommand.toUpperCase().includes('CREATE INDEX'));
+              (errorMsg.includes('Cannot find the object') && cleanCommand.toUpperCase().includes('CREATE INDEX')) ||
+              // Ignorar errores de migración que son esperados (columnas que ya fueron renombradas)
+              (errorMsg.includes('Invalid column name') && (
+                cleanCommand.includes('sp_rename') || 
+                cleanCommand.includes('IF EXISTS') ||
+                cleanCommand.includes('INFORMATION_SCHEMA')
+              ));
             
             if (!isExpectedError) {
               console.error(`❌ Error ejecutando comando SQL:`);
               console.error(`   ${errorMsg.substring(0, 200)}`);
               console.error(`   Comando: ${cleanCommand.substring(0, 100)}...`);
+            } else {
+              // Mostrar mensajes informativos para migraciones exitosas
+              if (cleanCommand.includes('sp_rename') && errorMsg.includes('Invalid column name')) {
+                // Esto es normal cuando una columna ya fue renombrada
+                // No mostrar error, solo continuar
+              }
             }
           }
         }

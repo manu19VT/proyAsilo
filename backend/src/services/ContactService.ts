@@ -8,13 +8,13 @@ export class ContactService {
     return db.prepare(`
       SELECT 
         id,
-        patient_id as patientId,
-        name,
-        phone,
-        relation,
+        paciente_id as patientId,
+        nombre as name,
+        telefono as phone,
+        relacion as relation,
         rfc,
-        age,
-        address
+        edad as age,
+        direccion as address
       FROM contacts 
       WHERE id = ?
     `).get(id) as Contact | undefined || null;
@@ -25,7 +25,7 @@ export class ContactService {
     const id = uuidv4();
     
     db.prepare(`
-      INSERT INTO contacts (id, patient_id, name, phone, relation, rfc, age, address, created_at)
+      INSERT INTO contacts (id, paciente_id, nombre, telefono, relacion, rfc, edad, direccion, fecha_creacion)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
@@ -49,13 +49,13 @@ export class ContactService {
     
     db.prepare(`
       UPDATE contacts 
-      SET patient_id = COALESCE(?, patient_id),
-          name = COALESCE(?, name),
-          phone = COALESCE(?, phone),
-          relation = COALESCE(?, relation),
+      SET paciente_id = COALESCE(?, paciente_id),
+          nombre = COALESCE(?, nombre),
+          telefono = COALESCE(?, telefono),
+          relacion = COALESCE(?, relacion),
           rfc = COALESCE(?, rfc),
-          age = COALESCE(?, age),
-          address = COALESCE(?, address)
+          edad = COALESCE(?, edad),
+          direccion = COALESCE(?, direccion)
       WHERE id = ?
     `).run(
       data.patientId || null,

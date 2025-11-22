@@ -14,7 +14,7 @@ export class EntryRequestService {
     const result = await queryOne<{ total?: number }>(`
       SELECT COUNT(*) AS total
       FROM entry_requests
-      WHERE type = @type AND YEAR(created_at) = @year
+      WHERE tipo = @type AND YEAR(fecha_creacion) = @year
     `, { type, year });
     const next = (result?.total || 0) + 1;
     return `${prefix}-${year}-${String(next).padStart(4, '0')}`;
@@ -38,23 +38,23 @@ export class EntryRequestService {
       SELECT 
         id,
         folio,
-        type,
-        patient_id as patientId,
-        created_at as createdAt,
-        status,
-        due_date as dueDate
+        tipo as type,
+        paciente_id as patientId,
+        fecha_creacion as createdAt,
+        estado as status,
+        fecha_vencimiento as dueDate
       FROM entry_requests
     `;
     const params: Record<string, any> = {};
     const conditions: string[] = [];
 
     if (filters?.type) {
-      conditions.push('type = @type');
+      conditions.push('tipo = @type');
       params.type = filters.type;
     }
 
     if (filters?.patientId) {
-      conditions.push('patient_id = @patientId');
+      conditions.push('paciente_id = @patientId');
       params.patientId = filters.patientId;
     }
 
@@ -62,7 +62,7 @@ export class EntryRequestService {
       sql += ` WHERE ${conditions.join(' AND ')}`;
     }
 
-    sql += ' ORDER BY created_at DESC';
+    sql += ' ORDER BY fecha_creacion DESC';
 
     const rows = await query<any>(sql, params);
     const entries = await Promise.all(rows.map(async (row) => {
@@ -77,11 +77,11 @@ export class EntryRequestService {
       SELECT 
         id,
         folio,
-        type,
-        patient_id as patientId,
-        created_at as createdAt,
-        status,
-        due_date as dueDate
+        tipo as type,
+        paciente_id as patientId,
+        fecha_creacion as createdAt,
+        estado as status,
+        fecha_vencimiento as dueDate
       FROM entry_requests 
       WHERE id = @id
     `, { id });
@@ -97,11 +97,11 @@ export class EntryRequestService {
       SELECT 
         id,
         folio,
-        type,
-        patient_id as patientId,
-        created_at as createdAt,
-        status,
-        due_date as dueDate
+        tipo as type,
+        paciente_id as patientId,
+        fecha_creacion as createdAt,
+        estado as status,
+        fecha_vencimiento as dueDate
       FROM entry_requests 
       WHERE folio = @folio
     `, { folio });
@@ -121,7 +121,7 @@ export class EntryRequestService {
     if (data.type === 'salida') {
       for (const item of data.items) {
         const medication = await queryOne<{ qty: number; name: string }>(
-          'SELECT qty, name FROM medications WHERE id = @id',
+          'SELECT cantidad as qty, nombre as name FROM medications WHERE id = @id',
           { id: item.medicationId }
         );
         if (!medication) {
@@ -134,7 +134,7 @@ export class EntryRequestService {
     }
 
     await execute(`
-      INSERT INTO entry_requests (id, folio, type, patient_id, created_at, status, due_date)
+      INSERT INTO entry_requests (id, folio, tipo, paciente_id, fecha_creacion, estado, fecha_vencimiento)
       VALUES (@id, @folio, @type, @patientId, @createdAt, @status, @dueDate)
     `, {
       id,
@@ -156,13 +156,13 @@ export class EntryRequestService {
       if (data.type === 'salida') {
         await execute(`
           UPDATE medications
-          SET qty = qty - @qty, updated_at = @updatedAt
+          SET cantidad = cantidad - @qty, fecha_actualizacion = @updatedAt
           WHERE id = @medicationId
         `, { medicationId: item.medicationId, qty: item.qty, updatedAt: now });
       } else {
         await execute(`
           UPDATE medications
-          SET qty = qty + @qty, updated_at = @updatedAt
+          SET cantidad = cantidad + @qty, fecha_actualizacion = @updatedAt
           WHERE id = @medicationId
         `, { medicationId: item.medicationId, qty: item.qty, updatedAt: now });
       }
@@ -178,9 +178,9 @@ export class EntryRequestService {
     
     await execute(`
       UPDATE entry_requests 
-      SET patient_id = COALESCE(@patientId, patient_id),
-          status = COALESCE(@status, status),
-          due_date = COALESCE(@dueDate, due_date)
+      SET paciente_id = COALESCE(@patientId, paciente_id),
+          estado = COALESCE(@status, estado),
+          fecha_vencimiento = COALESCE(@dueDate, fecha_vencimiento)
       WHERE id = @id
     `, {
       patientId: data.patientId || null,
@@ -190,7 +190,7 @@ export class EntryRequestService {
     });
     
     if (data.items) {
-      await execute('DELETE FROM entry_items WHERE entry_request_id = @id', { id });
+      await execute('DELETE FROM entry_items WHERE solicitud_id = @id', { id });
       for (const item of data.items) {
         await this.createEntryItem({
           entryRequestId: id,
@@ -211,10 +211,10 @@ export class EntryRequestService {
   async getItemsByEntryId(entryRequestId: ID): Promise<{ medicationId: ID; qty: number }[]> {
     const items = await query<{ medicationId: ID; qty: number }>(`
       SELECT 
-        medication_id as medicationId,
-        qty
+        medicamento_id as medicationId,
+        cantidad as qty
       FROM entry_items 
-      WHERE entry_request_id = @entryRequestId
+      WHERE solicitud_id = @entryRequestId
     `, { entryRequestId });
     return items;
   }
@@ -223,7 +223,7 @@ export class EntryRequestService {
     const id = uuidv4();
     
     await execute(`
-      INSERT INTO entry_items (id, entry_request_id, medication_id, qty)
+      INSERT INTO entry_items (id, solicitud_id, medicamento_id, cantidad)
       VALUES (@id, @entryRequestId, @medicationId, @qty)
     `, {
       id,
