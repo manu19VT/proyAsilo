@@ -889,15 +889,17 @@ export default function PatientsPage() {
                               <Typography variant="body2" fontWeight={600}>
                                 {med.medicationName || "Medicamento"}
                               </Typography>
-                              <Chip size="small" label={med.dosage} />
+                              {med.cantidad && (
+                                <Chip size="small" color="primary" label={`Cantidad: ${med.cantidad} ${med.medicationUnit || ""}`} />
+                              )}
+                              <Chip size="small" label={`Dosis: ${med.dosage}`} />
                               <Chip size="small" variant="outlined" label={med.frequency} />
                             </Stack>
                           )}
                           secondary={(
                             <Typography variant="caption" color="text.secondary" display="block">
                               Recetado: {formatDateTime(med.prescribedAt)}
-                              {med.medicationDosage && ` • Dosis recomendada: ${med.medicationDosage}`}
-                              {med.medicationUnit && ` • Unidad: ${med.medicationUnit}`}
+                              {med.medicationDosage && ` • Dosis recomendada del medicamento: ${med.medicationDosage}`}
                             </Typography>
                           )}
                         />

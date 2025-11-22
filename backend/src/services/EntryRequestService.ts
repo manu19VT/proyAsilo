@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { EntryRequest, ID } from '../types';
 import { query, queryOne, execute } from '../database/database';
+import { patientMedicationService } from './PatientMedicationService';
 
 interface EntryFilters {
   type?: "entrada" | "salida";
@@ -20,7 +21,7 @@ export class EntryRequestService {
     return `${prefix}-${year}-${String(next).padStart(4, '0')}`;
   }
 
-  private mapRow(row: any, items: { medicationId: ID; qty: number }[]): EntryRequest {
+  private mapRow(row: any, items: { medicationId: ID; qty: number; dosisRecomendada?: string; frecuencia?: string; fechaCaducidad?: string }[]): EntryRequest {
     return {
       id: row.id,
       folio: row.folio,
@@ -112,7 +113,7 @@ export class EntryRequestService {
     return this.mapRow(row, items);
   }
 
-  async createEntryRequest(data: Omit<EntryRequest, 'id' | 'folio' | 'createdAt'>): Promise<EntryRequest> {
+  async createEntryRequest(data: Omit<EntryRequest, 'id' | 'folio' | 'createdAt'> & { userId?: ID }): Promise<EntryRequest> {
     const id = uuidv4();
     const now = new Date().toISOString();
     const folio = await this.getNextFolio(data.type);
@@ -150,15 +151,37 @@ export class EntryRequestService {
       await this.createEntryItem({
         entryRequestId: id,
         medicationId: item.medicationId,
-        qty: item.qty
+        qty: item.qty,
+        dosisRecomendada: item.dosisRecomendada,
+        frecuencia: item.frecuencia,
+        fechaCaducidad: item.fechaCaducidad
       });
 
       if (data.type === 'salida') {
+        // Actualizar inventario
         await execute(`
           UPDATE medications
           SET cantidad = cantidad - @qty, fecha_actualizacion = @updatedAt
           WHERE id = @medicationId
         `, { medicationId: item.medicationId, qty: item.qty, updatedAt: now });
+
+        // Registrar medicamento en patient_medications si tiene dosis y frecuencia
+        if (item.dosisRecomendada && item.frecuencia) {
+          try {
+            await patientMedicationService.assignMedication({
+              patientId: data.patientId,
+              medicationId: item.medicationId,
+              dosage: item.dosisRecomendada,
+              frequency: item.frecuencia,
+              prescribedAt: now,
+              prescribedBy: data.userId || null,
+              cantidad: item.qty
+            });
+          } catch (error) {
+            // Log error pero no fallar la creación de la salida
+            console.error('Error al registrar medicamento en patient_medications:', error);
+          }
+        }
       } else {
         await execute(`
           UPDATE medications
@@ -195,7 +218,10 @@ export class EntryRequestService {
         await this.createEntryItem({
           entryRequestId: id,
           medicationId: item.medicationId,
-          qty: item.qty
+          qty: item.qty,
+          dosisRecomendada: item.dosisRecomendada,
+          frecuencia: item.frecuencia,
+          fechaCaducidad: item.fechaCaducidad
         });
       }
     }
@@ -208,28 +234,34 @@ export class EntryRequestService {
     return rowsAffected > 0;
   }
 
-  async getItemsByEntryId(entryRequestId: ID): Promise<{ medicationId: ID; qty: number }[]> {
-    const items = await query<{ medicationId: ID; qty: number }>(`
+  async getItemsByEntryId(entryRequestId: ID): Promise<{ medicationId: ID; qty: number; dosisRecomendada?: string; frecuencia?: string; fechaCaducidad?: string }[]> {
+    const items = await query<{ medicationId: ID; qty: number; dosisRecomendada?: string; frecuencia?: string; fechaCaducidad?: string }>(`
       SELECT 
         medicamento_id as medicationId,
-        cantidad as qty
+        cantidad as qty,
+        dosis_recomendada as dosisRecomendada,
+        frecuencia as frecuencia,
+        fecha_caducidad as fechaCaducidad
       FROM entry_items 
       WHERE solicitud_id = @entryRequestId
     `, { entryRequestId });
     return items;
   }
 
-  async createEntryItem(data: { entryRequestId: ID; medicationId: ID; qty: number }): Promise<void> {
+  async createEntryItem(data: { entryRequestId: ID; medicationId: ID; qty: number; dosisRecomendada?: string; frecuencia?: string; fechaCaducidad?: string }): Promise<void> {
     const id = uuidv4();
     
     await execute(`
-      INSERT INTO entry_items (id, solicitud_id, medicamento_id, cantidad)
-      VALUES (@id, @entryRequestId, @medicationId, @qty)
+      INSERT INTO entry_items (id, solicitud_id, medicamento_id, cantidad, dosis_recomendada, frecuencia, fecha_caducidad)
+      VALUES (@id, @entryRequestId, @medicationId, @qty, @dosisRecomendada, @frecuencia, @fechaCaducidad)
     `, {
       id,
       entryRequestId: data.entryRequestId,
       medicationId: data.medicationId,
-      qty: data.qty
+      qty: data.qty,
+      dosisRecomendada: data.dosisRecomendada || null,
+      frecuencia: data.frecuencia || null,
+      fechaCaducidad: data.fechaCaducidad || null
     });
   }
 }

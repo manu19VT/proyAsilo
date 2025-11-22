@@ -28,15 +28,20 @@ import { Table } from "../components/Table";
 import Printable from "../components/Printable";
 import { api } from "../api/client";
 import { EntryRequest, Medication, Patient } from "../types";
+import { useAuth } from "../contexts/AuthContext";
 
 type TypeFilter = "todos" | "entrada" | "salida";
 
 interface SelectedItem {
   medicationId: string;
   qty: number;
+  dosisRecomendada?: string;
+  frecuencia?: string;
+  fechaCaducidad?: string;
 }
 
 export default function EntriesPage() {
+  const { user } = useAuth();
   const [entries, setEntries] = useState<EntryRequest[]>([]);
   const [filteredEntries, setFilteredEntries] = useState<EntryRequest[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -52,6 +57,8 @@ export default function EntriesPage() {
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   const [selectedMedId, setSelectedMedId] = useState("");
   const [itemQty, setItemQty] = useState("");
+  const [itemDosis, setItemDosis] = useState("");
+  const [itemFrecuencia, setItemFrecuencia] = useState("");
 
   const [printEntry, setPrintEntry] = useState<EntryRequest | null>(null);
 
@@ -93,6 +100,8 @@ export default function EntriesPage() {
     setSelectedItems([]);
     setSelectedMedId("");
     setItemQty("");
+    setItemDosis("");
+    setItemFrecuencia("");
     setShowForm(false);
   };
 
@@ -118,14 +127,32 @@ export default function EntriesPage() {
       return;
     }
 
+    if (entryType === "salida" && (!itemDosis.trim() || !itemFrecuencia.trim())) {
+      alert("Para salidas, debes completar la dosis recomendada y la frecuencia");
+      return;
+    }
+
     if (selectedItems.some(i => i.medicationId === selectedMedId)) {
       alert("Este medicamento ya está agregado");
       return;
     }
 
-    setSelectedItems(prev => [...prev, { medicationId: selectedMedId, qty: Number(itemQty) }]);
+    const newItem: SelectedItem = {
+      medicationId: selectedMedId,
+      qty: Number(itemQty)
+    };
+
+    if (entryType === "salida") {
+      newItem.dosisRecomendada = itemDosis.trim();
+      newItem.frecuencia = itemFrecuencia.trim();
+      newItem.fechaCaducidad = med.expiresAt;
+    }
+
+    setSelectedItems(prev => [...prev, newItem]);
     setSelectedMedId("");
     setItemQty("");
+    setItemDosis("");
+    setItemFrecuencia("");
   };
 
   const handleRemoveItem = (id: string) => {
@@ -144,7 +171,8 @@ export default function EntriesPage() {
         patientId,
         items: selectedItems,
         status: "completa",
-        dueDate: entryType === "salida" && dueDate ? new Date(dueDate).toISOString() : undefined
+        dueDate: entryType === "salida" && dueDate ? new Date(dueDate).toISOString() : undefined,
+        userId: user?.id
       });
       alert(`${entryType === "entrada" ? "Entrada" : "Salida"} registrada correctamente`);
       resetForm();
@@ -267,14 +295,29 @@ export default function EntriesPage() {
                   const med = getMedById.get(item.medicationId);
                   return (
                     <Paper key={item.medicationId} sx={{ p: 1.5, bgcolor: "#f5f5f5" }}>
-                      <Stack direction="row" justifyContent="space-between" alignItems="center">
-                        <Box>
+                      <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+                        <Box sx={{ flex: 1 }}>
                           <Typography variant="body2" fontWeight={600}>
                             {med?.name || "Desconocido"}
                           </Typography>
-                          <Typography variant="caption" color="text.secondary">
+                          <Typography variant="caption" color="text.secondary" display="block">
                             Cantidad: {item.qty} {med?.unit || "unidades"}
                           </Typography>
+                          {entryType === "salida" && item.dosisRecomendada && (
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              Dosis: {item.dosisRecomendada}
+                            </Typography>
+                          )}
+                          {entryType === "salida" && item.frecuencia && (
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              Frecuencia: {item.frecuencia}
+                            </Typography>
+                          )}
+                          {entryType === "salida" && item.fechaCaducidad && (
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              Caducidad: {new Date(item.fechaCaducidad).toLocaleDateString()}
+                            </Typography>
+                          )}
                         </Box>
                         <IconButton
                           size="small"
@@ -300,7 +343,16 @@ export default function EntriesPage() {
                   select
                   size="small"
                   value={selectedMedId}
-                  onChange={(e) => setSelectedMedId(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedMedId(e.target.value);
+                    // Auto-completar fecha de caducidad si es salida
+                    if (entryType === "salida" && e.target.value) {
+                      const med = getMedById.get(e.target.value);
+                      if (med) {
+                        // La fecha se asignará automáticamente al agregar
+                      }
+                    }
+                  }}
                   fullWidth
                 >
                   {medications.map(med => (
@@ -320,11 +372,37 @@ export default function EntriesPage() {
                   inputProps={{ min: 1 }}
                 />
 
+                {entryType === "salida" && (
+                  <>
+                    <TextField
+                      label="Dosis recomendada *"
+                      size="small"
+                      value={itemDosis}
+                      onChange={(e) => setItemDosis(e.target.value)}
+                      fullWidth
+                      placeholder="Ej: 500mg, 1 tableta, 10ml, etc."
+                      helperText={selectedMedId ? (() => {
+                        const med = getMedById.get(selectedMedId);
+                        return med?.dosage ? `Dosis del medicamento: ${med.dosage}` : undefined;
+                      })() : undefined}
+                    />
+
+                    <TextField
+                      label="Cada cuándo tomar *"
+                      size="small"
+                      value={itemFrecuencia}
+                      onChange={(e) => setItemFrecuencia(e.target.value)}
+                      fullWidth
+                      placeholder="Ej: Cada 8 horas, 3 veces al día, etc."
+                    />
+                  </>
+                )}
+
                 <Button
                   variant="outlined"
                   size="small"
                   onClick={handleAddItem}
-                  disabled={!selectedMedId || !itemQty}
+                  disabled={!selectedMedId || !itemQty || (entryType === "salida" && (!itemDosis.trim() || !itemFrecuencia.trim()))}
                 >
                   Agregar
                 </Button>
@@ -481,6 +559,13 @@ export default function EntriesPage() {
                   <tr style={{ borderBottom: "2px solid #000" }}>
                     <th style={{ padding: 8, textAlign: "left" }}>Medicamento</th>
                     <th style={{ padding: 8, textAlign: "right" }}>Cantidad</th>
+                    {printEntry.type === "salida" && (
+                      <>
+                        <th style={{ padding: 8, textAlign: "left" }}>Dosis</th>
+                        <th style={{ padding: 8, textAlign: "left" }}>Frecuencia</th>
+                        <th style={{ padding: 8, textAlign: "left" }}>Caducidad</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -492,6 +577,15 @@ export default function EntriesPage() {
                         <td style={{ padding: 8, textAlign: "right" }}>
                           {item.qty} {med?.unit || ""}
                         </td>
+                        {printEntry.type === "salida" && (
+                          <>
+                            <td style={{ padding: 8 }}>{item.dosisRecomendada || "-"}</td>
+                            <td style={{ padding: 8 }}>{item.frecuencia || "-"}</td>
+                            <td style={{ padding: 8 }}>
+                              {item.fechaCaducidad ? new Date(item.fechaCaducidad).toLocaleDateString() : "-"}
+                            </td>
+                          </>
+                        )}
                       </tr>
                     );
                   })}
@@ -502,6 +596,11 @@ export default function EntriesPage() {
                     <td style={{ padding: 8, textAlign: "right" }}>
                       {getTotalItems(printEntry)} items
                     </td>
+                    {printEntry.type === "salida" && (
+                      <>
+                        <td colSpan={3}></td>
+                      </>
+                    )}
                   </tr>
                 </tfoot>
               </table>
@@ -534,6 +633,11 @@ export default function EntriesPage() {
                       <tr style="border-bottom: 2px solid #000;">
                         <th style="padding: 8px; text-align: left;">Medicamento</th>
                         <th style="padding: 8px; text-align: right;">Cantidad</th>
+                        ${printEntry.type === "salida" ? `
+                          <th style="padding: 8px; text-align: left;">Dosis</th>
+                          <th style="padding: 8px; text-align: left;">Frecuencia</th>
+                          <th style="padding: 8px; text-align: left;">Caducidad</th>
+                        ` : ""}
                       </tr>
                     </thead>
                     <tbody>
@@ -543,6 +647,11 @@ export default function EntriesPage() {
                           <tr style="border-bottom: 1px solid #ccc;">
                             <td style="padding: 8px;">${med?.name || "Desconocido"}</td>
                             <td style="padding: 8px; text-align: right;">${item.qty} ${med?.unit || ""}</td>
+                            ${printEntry.type === "salida" ? `
+                              <td style="padding: 8px;">${item.dosisRecomendada || "-"}</td>
+                              <td style="padding: 8px;">${item.frecuencia || "-"}</td>
+                              <td style="padding: 8px;">${item.fechaCaducidad ? new Date(item.fechaCaducidad).toLocaleDateString() : "-"}</td>
+                            ` : ""}
                           </tr>
                         `;
                       }).join("")}
@@ -551,6 +660,7 @@ export default function EntriesPage() {
                       <tr style="border-top: 2px solid #000; font-weight: 700;">
                         <td style="padding: 8px;">TOTAL</td>
                         <td style="padding: 8px; text-align: right;">${getTotalItems(printEntry)} items</td>
+                        ${printEntry.type === "salida" ? `<td colspan="3"></td>` : ""}
                       </tr>
                     </tfoot>
                   </table>

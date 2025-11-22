@@ -172,7 +172,7 @@ export const api = {
     return request<EntryRequest>(`/entry-requests/folio/${folio}`);
   },
 
-  addEntry: async (e: Omit<EntryRequest, "id" | "createdAt" | "folio">) => {
+  addEntry: async (e: Omit<EntryRequest, "id" | "createdAt" | "folio"> & { userId?: string }) => {
     return request<EntryRequest>('/entry-requests', {
       method: 'POST',
       body: JSON.stringify(e),

@@ -13,6 +13,7 @@ export class PatientMedicationService {
         pm.frecuencia as frequency,
         pm.fecha_prescripcion as prescribedAt,
         pm.prescrito_por as prescribedBy,
+        pm.cantidad as cantidad,
         m.nombre as medicationName,
         m.unidad as medicationUnit,
         m.dosis as medicationDosage
@@ -30,6 +31,7 @@ export class PatientMedicationService {
       frequency: row.frequency,
       prescribedAt: row.prescribedAt,
       prescribedBy: row.prescribedBy || undefined,
+      cantidad: row.cantidad || undefined,
       medicationName: row.medicationName || undefined,
       medicationUnit: row.medicationUnit || undefined,
       medicationDosage: row.medicationDosage || undefined
@@ -40,9 +42,9 @@ export class PatientMedicationService {
     const id = uuidv4();
     await execute(`
       INSERT INTO patient_medications (
-        id, paciente_id, medicamento_id, dosis, frecuencia, fecha_prescripcion, prescrito_por
+        id, paciente_id, medicamento_id, dosis, frecuencia, fecha_prescripcion, prescrito_por, cantidad
       ) VALUES (
-        @id, @patientId, @medicationId, @dosage, @frequency, @prescribedAt, @prescribedBy
+        @id, @patientId, @medicationId, @dosage, @frequency, @prescribedAt, @prescribedBy, @cantidad
       )
     `, {
       id,
@@ -51,7 +53,8 @@ export class PatientMedicationService {
       dosage: data.dosage,
       frequency: data.frequency,
       prescribedAt: data.prescribedAt,
-      prescribedBy: data.prescribedBy || null
+      prescribedBy: data.prescribedBy || null,
+      cantidad: data.cantidad || null
     });
 
     const row = await queryOne<any>(`
@@ -63,6 +66,7 @@ export class PatientMedicationService {
         pm.frecuencia as frequency,
         pm.fecha_prescripcion as prescribedAt,
         pm.prescrito_por as prescribedBy,
+        pm.cantidad as cantidad,
         m.nombre as medicationName,
         m.unidad as medicationUnit,
         m.dosis as medicationDosage
@@ -79,6 +83,7 @@ export class PatientMedicationService {
       frequency: row.frequency,
       prescribedAt: row.prescribedAt,
       prescribedBy: row.prescribedBy || undefined,
+      cantidad: row.cantidad || undefined,
       medicationName: row.medicationName || undefined,
       medicationUnit: row.medicationUnit || undefined,
       medicationDosage: row.medicationDosage || undefined

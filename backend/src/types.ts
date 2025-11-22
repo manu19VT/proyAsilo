@@ -55,6 +55,7 @@ export interface PatientMedication {
   frequency: string;
   prescribedAt: string;
   prescribedBy?: string;
+  cantidad?: number; // cantidad entregada al paciente
   medicationName?: string;
   medicationUnit?: string;
   medicationDosage?: string;
@@ -66,7 +67,13 @@ export interface EntryRequest {
   type: "entrada" | "salida";
   patientId: ID;
   createdAt: string;
-  items: { medicationId: ID; qty: number }[];
+  items: { 
+    medicationId: ID; 
+    qty: number;
+    dosisRecomendada?: string; // dosis recomendada (solo para salidas)
+    frecuencia?: string; // cada cuándo tomar (solo para salidas)
+    fechaCaducidad?: string; // fecha de caducidad del medicamento (solo para salidas)
+  }[];
   status: "completa" | "incompleta";
   dueDate?: string;
 }

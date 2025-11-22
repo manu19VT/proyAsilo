@@ -1070,9 +1070,27 @@ BEGIN
         solicitud_id NVARCHAR(36) NOT NULL,
         medicamento_id NVARCHAR(36) NOT NULL,
         cantidad INT NOT NULL,
+        dosis_recomendada NVARCHAR(255) NULL,
+        frecuencia NVARCHAR(255) NULL,
+        fecha_caducidad NVARCHAR(50) NULL,
         CONSTRAINT FK_entry_items_solicitud FOREIGN KEY (solicitud_id) REFERENCES entry_requests(id) ON DELETE CASCADE,
         CONSTRAINT FK_entry_items_medicamento FOREIGN KEY (medicamento_id) REFERENCES medications(id) ON DELETE CASCADE
     );
+END
+GO
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'entry_items' AND COLUMN_NAME = 'dosis_recomendada')
+BEGIN
+    ALTER TABLE entry_items ADD dosis_recomendada NVARCHAR(255) NULL;
+END
+GO
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'entry_items' AND COLUMN_NAME = 'frecuencia')
+BEGIN
+    ALTER TABLE entry_items ADD frecuencia NVARCHAR(255) NULL;
+END
+GO
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'entry_items' AND COLUMN_NAME = 'fecha_caducidad')
+BEGIN
+    ALTER TABLE entry_items ADD fecha_caducidad NVARCHAR(50) NULL;
 END
 GO
 
@@ -1087,10 +1105,16 @@ BEGIN
         frecuencia NVARCHAR(255) NOT NULL,
         fecha_prescripcion NVARCHAR(50) NOT NULL,
         prescrito_por NVARCHAR(36) NULL,
+        cantidad INT NULL,
         CONSTRAINT FK_patient_medications_paciente FOREIGN KEY (paciente_id) REFERENCES patients(id) ON DELETE CASCADE,
         CONSTRAINT FK_patient_medications_medicamento FOREIGN KEY (medicamento_id) REFERENCES medications(id) ON DELETE CASCADE,
         CONSTRAINT FK_patient_medications_prescrito_por FOREIGN KEY (prescrito_por) REFERENCES users(id)
     );
+END
+GO
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'patient_medications' AND COLUMN_NAME = 'cantidad')
+BEGIN
+    ALTER TABLE patient_medications ADD cantidad INT NULL;
 END
 GO
 IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'patient_medications' AND COLUMN_NAME = 'paciente_id')
