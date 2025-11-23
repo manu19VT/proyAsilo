@@ -29,13 +29,14 @@ import {
   Badge as BadgeIcon,
   ContactPhone as ContactIcon,
   Inventory2 as InventoryIcon,
-  MedicationLiquid as MedicationIcon
+  MedicationLiquid as MedicationIcon,
+  Edit as EditIcon
 } from "@mui/icons-material";
 import { AnimatePresence, motion } from "framer-motion";
 import Page from "../components/Page";
 import { Table } from "../components/Table";
 import { api } from "../api/client";
-import { Patient, Contact, PatientMedication, PersonalObject } from "../types";
+import { Patient, Contact, PatientMedication, PersonalObject, User } from "../types";
 import { useAuth } from "../contexts/AuthContext";
 
 type StatusTab = "activo" | "baja" | "todos";
@@ -66,6 +67,7 @@ export default function PatientsPage() {
   const [searchType, setSearchType] = useState<SearchType>("nombre");
 
   const [showForm, setShowForm] = useState(false);
+  const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [name, setName] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [birthPlace, setBirthPlace] = useState("");
@@ -74,6 +76,10 @@ export default function PatientsPage() {
   const [admissionDate, setAdmissionDate] = useState("");
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
+  const [doctorId, setDoctorId] = useState("");
+  const [nurseId, setNurseId] = useState("");
+  const [doctors, setDoctors] = useState<User[]>([]);
+  const [nurses, setNurses] = useState<User[]>([]);
 
   const [contacts, setContacts] = useState<Omit<Contact, "id" | "patientId">[]>([]);
   const [contactName, setContactName] = useState("");
@@ -201,7 +207,9 @@ export default function PatientsPage() {
   const load = async () => {
     try {
       const data = await api.listPatients({
-        status: statusFilter === "todos" ? undefined : statusFilter
+        status: statusFilter === "todos" ? undefined : statusFilter,
+        userId: user?.id,
+        userRole: user?.role
       });
       const normalized = data.map(p => ({
         ...p,
@@ -222,6 +230,12 @@ export default function PatientsPage() {
   }, [statusFilter]);
 
   useEffect(() => {
+    if (showForm) {
+      loadDoctorsAndNurses();
+    }
+  }, [showForm]);
+
+  useEffect(() => {
     setFilteredItems(filterPatients(items, searchQuery, searchType));
   }, [items, searchQuery, searchType, filterPatients]);
 
@@ -234,6 +248,8 @@ export default function PatientsPage() {
     setAdmissionDate("");
     setAddress("");
     setNotes("");
+    setDoctorId("");
+    setNurseId("");
     setContacts([]);
     setContactName("");
     setContactPhone("");
@@ -242,6 +258,43 @@ export default function PatientsPage() {
     setContactAge("");
     setContactAddress("");
     setShowForm(false);
+    setEditingPatient(null);
+  };
+
+  const openEditForm = (patient: Patient) => {
+    setEditingPatient(patient);
+    setName(patient.name);
+    setBirthDate(patient.birthDate ? patient.birthDate.split('T')[0] : "");
+    setBirthPlace(patient.birthPlace || "");
+    setCurp(patient.curp || "");
+    setRfc(patient.rfc || "");
+    setAdmissionDate(patient.admissionDate ? patient.admissionDate.split('T')[0] : "");
+    setAddress(patient.address || "");
+    setNotes(patient.notes || "");
+    setDoctorId(patient.doctorId || "");
+    setNurseId(patient.nurseId || "");
+    setContacts(patient.contacts.map(c => ({
+      name: c.name,
+      phone: c.phone,
+      relation: c.relation,
+      rfc: c.rfc,
+      age: c.age,
+      address: c.address
+    })));
+    setShowForm(true);
+  };
+
+  const loadDoctorsAndNurses = async () => {
+    try {
+      const [doctorsData, nursesData] = await Promise.all([
+        api.listDoctors(),
+        api.listNurses()
+      ]);
+      setDoctors(doctorsData);
+      setNurses(nursesData);
+    } catch (error) {
+      console.error("Error al cargar doctores y enfermeros:", error);
+    }
   };
 
   const addContact = () => {
@@ -284,6 +337,11 @@ export default function PatientsPage() {
       return;
     }
 
+    // Mostrar mensaje si es enfermero (solo al crear, no al editar)
+    if (user?.role === "nurse" && !editingPatient) {
+      alert("Se le asignará un doctor y enfermero en un momento.");
+    }
+
     try {
       await api.addPatient({
         name: name.trim(),
@@ -298,7 +356,10 @@ export default function PatientsPage() {
         address: address.trim() || undefined,
         notes: notes.trim() || undefined,
         contacts: contacts as Contact[],
-        userId: user?.id
+        userId: user?.id,
+        userRole: user?.role,
+        doctorId: doctorId || undefined,
+        nurseId: nurseId || undefined
       });
 
       resetForm();
@@ -306,6 +367,39 @@ export default function PatientsPage() {
     } catch (error) {
       console.error(error);
       alert("Error al agregar paciente");
+    }
+  };
+
+  const handleUpdatePatient = async () => {
+    if (!editingPatient || !name.trim()) {
+      alert("El nombre es obligatorio");
+      return;
+    }
+
+    try {
+      await api.updatePatient(editingPatient.id, {
+        name: name.trim(),
+        birthDate: birthDate || undefined,
+        age: birthDate ? calculateAge(birthDate) : undefined,
+        birthPlace: birthPlace.trim() || undefined,
+        curp: curp.trim() || undefined,
+        rfc: rfc.trim() || undefined,
+        admissionDate: admissionDate
+          ? new Date(admissionDate).toISOString()
+          : undefined,
+        address: address.trim() || undefined,
+        notes: notes.trim() || undefined,
+        contacts: contacts as Contact[],
+        userId: user?.id,
+        doctorId: doctorId || undefined,
+        nurseId: nurseId || undefined
+      });
+
+      resetForm();
+      load();
+    } catch (error) {
+      console.error(error);
+      alert("Error al actualizar paciente");
     }
   };
 
@@ -525,6 +619,56 @@ export default function PatientsPage() {
             />
 
             <Typography variant="subtitle2" color="primary" sx={{ mt: 2 }}>
+              Asignación de Personal
+            </Typography>
+
+            {user?.role === "admin" && (
+              <TextField
+                select
+                label="Doctor asignado"
+                size="small"
+                value={doctorId}
+                onChange={(e) => setDoctorId(e.target.value)}
+                fullWidth
+              >
+                <MenuItem value="">
+                  <em>Seleccionar doctor</em>
+                </MenuItem>
+                {doctors.map((doctor) => (
+                  <MenuItem key={doctor.id} value={doctor.id}>
+                    {doctor.name} (Doctor)
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
+
+            {(user?.role === "admin" || user?.role === "doctor") && (
+              <TextField
+                select
+                label="Enfermero/a asignado"
+                size="small"
+                value={nurseId}
+                onChange={(e) => setNurseId(e.target.value)}
+                fullWidth
+              >
+                <MenuItem value="">
+                  <em>Seleccionar enfermero/a</em>
+                </MenuItem>
+                {nurses.map((nurse) => (
+                  <MenuItem key={nurse.id} value={nurse.id}>
+                    {nurse.name} (Enfermero/a)
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
+
+            {user?.role === "doctor" && (
+              <Alert severity="info" sx={{ mt: 1 }}>
+                El paciente será asignado automáticamente a ti como doctor.
+              </Alert>
+            )}
+
+            <Typography variant="subtitle2" color="primary" sx={{ mt: 2 }}>
               Contactos / Familiares
             </Typography>
 
@@ -627,11 +771,11 @@ export default function PatientsPage() {
               </Button>
               <Button
                 variant="contained"
-                onClick={handleAddPatient}
+                onClick={editingPatient ? handleUpdatePatient : handleAddPatient}
                 disabled={!name.trim()}
                 fullWidth
               >
-                Guardar Paciente
+                {editingPatient ? "Actualizar Paciente" : "Guardar Paciente"}
               </Button>
             </Stack>
           </Stack>
@@ -692,6 +836,15 @@ export default function PatientsPage() {
                     onClick={() => openPatientDetails(patient.id)}
                   >
                     Ver detalles
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="primary"
+                    startIcon={<EditIcon />}
+                    onClick={() => openEditForm(patient)}
+                  >
+                    Editar
                   </Button>
                   {patient.status === "activo" ? (
                     <Button
@@ -794,6 +947,34 @@ export default function PatientsPage() {
                   </Alert>
                 )}
               </DetailSection>
+
+              {(detailPatient.doctorName || detailPatient.nurseName) && (
+                <DetailSection
+                  title="Personal Asignado"
+                  icon={<BadgeIcon fontSize="small" />}
+                  subtitle="Doctor y enfermero a cargo del paciente"
+                >
+                  <Stack spacing={1}>
+                    {detailPatient.doctorName && (
+                      <InfoLine
+                        label="Doctor"
+                        value={`${detailPatient.doctorName} (Doctor)`}
+                      />
+                    )}
+                    {detailPatient.nurseName && (
+                      <InfoLine
+                        label="Enfermero/a"
+                        value={`${detailPatient.nurseName} (Enfermero/a)`}
+                      />
+                    )}
+                    {!detailPatient.doctorName && !detailPatient.nurseName && (
+                      <Typography variant="body2" color="text.secondary">
+                        No hay personal asignado
+                      </Typography>
+                    )}
+                  </Stack>
+                </DetailSection>
+              )}
 
               <DetailSection
                 title="Contactos"

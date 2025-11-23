@@ -32,6 +32,10 @@ export interface Patient {
   updatedBy?: string;
   createdByName?: string;
   updatedByName?: string;
+  doctorId?: string;
+  nurseId?: string;
+  doctorName?: string;
+  nurseName?: string;
 }
 
 export interface Medication {

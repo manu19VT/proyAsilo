@@ -32,6 +32,10 @@ export interface Patient {
   updatedBy?: string; // ID del usuario que actualizó el paciente
   createdByName?: string; // Nombre del usuario que creó
   updatedByName?: string; // Nombre del usuario que actualizó
+  doctorId?: string; // ID del doctor asignado
+  nurseId?: string; // ID del enfermero asignado
+  doctorName?: string; // Nombre del doctor asignado
+  nurseName?: string; // Nombre del enfermero asignado
 }
 
 export interface Medication {

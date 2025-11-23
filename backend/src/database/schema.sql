@@ -491,6 +491,19 @@ BEGIN
     END
 END
 GO
+-- Agregar foreign keys para doctor_id y enfermero_id si no existen
+IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'patients' AND COLUMN_NAME = 'doctor_id')
+   AND NOT EXISTS (SELECT * FROM sys.foreign_keys WHERE name = 'FK_patients_doctor')
+BEGIN
+    ALTER TABLE patients ADD CONSTRAINT FK_patients_doctor FOREIGN KEY (doctor_id) REFERENCES users(id);
+END
+GO
+IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'patients' AND COLUMN_NAME = 'enfermero_id')
+   AND NOT EXISTS (SELECT * FROM sys.foreign_keys WHERE name = 'FK_patients_enfermero')
+BEGIN
+    ALTER TABLE patients ADD CONSTRAINT FK_patients_enfermero FOREIGN KEY (enfermero_id) REFERENCES users(id);
+END
+GO
 
 -- Actualizar foreign keys de medications
 IF EXISTS (SELECT * FROM sys.foreign_keys WHERE name = 'FK_medications_created_by')
@@ -864,8 +877,12 @@ BEGIN
         fecha_actualizacion DATETIME2 DEFAULT GETDATE(),
         creado_por NVARCHAR(36) NULL,
         actualizado_por NVARCHAR(36) NULL,
+        doctor_id NVARCHAR(36) NULL,
+        enfermero_id NVARCHAR(36) NULL,
         CONSTRAINT FK_patients_creado_por FOREIGN KEY (creado_por) REFERENCES users(id),
-        CONSTRAINT FK_patients_actualizado_por FOREIGN KEY (actualizado_por) REFERENCES users(id)
+        CONSTRAINT FK_patients_actualizado_por FOREIGN KEY (actualizado_por) REFERENCES users(id),
+        CONSTRAINT FK_patients_doctor FOREIGN KEY (doctor_id) REFERENCES users(id),
+        CONSTRAINT FK_patients_enfermero FOREIGN KEY (enfermero_id) REFERENCES users(id)
     );
 END
 GO
@@ -941,6 +958,16 @@ GO
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'patients' AND COLUMN_NAME = 'motivo_baja')
 BEGIN
     ALTER TABLE patients ADD motivo_baja NVARCHAR(MAX) NULL;
+END
+GO
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'patients' AND COLUMN_NAME = 'doctor_id')
+BEGIN
+    ALTER TABLE patients ADD doctor_id NVARCHAR(36) NULL;
+END
+GO
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'patients' AND COLUMN_NAME = 'enfermero_id')
+BEGIN
+    ALTER TABLE patients ADD enfermero_id NVARCHAR(36) NULL;
 END
 GO
 
