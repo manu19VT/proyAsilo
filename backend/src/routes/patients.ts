@@ -6,11 +6,19 @@ const router = express.Router();
 // Listar pacientes
 router.get('/', async (req, res) => {
   try {
-    const { q, status, contactName } = req.query as { q?: string; status?: string; contactName?: string };
+    const { q, status, contactName, userId, userRole } = req.query as { 
+      q?: string; 
+      status?: string; 
+      contactName?: string;
+      userId?: string;
+      userRole?: string;
+    };
     const patients = await patientService.listPatients({
       query: q,
       status: status === 'activo' || status === 'baja' ? status : undefined,
-      contactName
+      contactName,
+      userId,
+      userRole
     });
     res.json(patients);
   } catch (error: any) {
@@ -34,9 +42,20 @@ router.get('/:id', async (req, res) => {
 // Crear paciente
 router.post('/', async (req, res) => {
   try {
+    // Obtener el rol del usuario si se proporciona userId
+    let userRole: string | undefined = req.body.userRole;
+    if (!userRole && req.body.userId) {
+      const { userService } = await import('../services/UserService');
+      const user = await userService.getUserById(req.body.userId);
+      userRole = user?.role;
+    }
+
     const patient = await patientService.createPatient({
       ...req.body,
-      createdBy: req.body.userId || null
+      createdBy: req.body.userId || null,
+      doctorId: req.body.doctorId || undefined,
+      nurseId: req.body.nurseId || undefined,
+      userRole: userRole
     });
     res.status(201).json(patient);
   } catch (error: any) {
@@ -49,7 +68,9 @@ router.put('/:id', async (req, res) => {
   try {
     const patient = await patientService.updatePatient(req.params.id, {
       ...req.body,
-      updatedBy: req.body.userId || null
+      updatedBy: req.body.userId || null,
+      doctorId: req.body.doctorId || undefined,
+      nurseId: req.body.nurseId || undefined
     });
     if (!patient) {
       return res.status(404).json({ error: 'Paciente no encontrado' });

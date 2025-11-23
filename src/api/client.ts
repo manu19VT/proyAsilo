@@ -33,11 +33,13 @@ export const api = {
   },
 
   // ========== Pacientes ==========
-  listPatients: async (filters?: { query?: string; status?: "activo" | "baja"; contactName?: string }) => {
+  listPatients: async (filters?: { query?: string; status?: "activo" | "baja"; contactName?: string; userId?: string; userRole?: string }) => {
     const params = new URLSearchParams();
     if (filters?.query) params.append('q', filters.query);
     if (filters?.status) params.append('status', filters.status);
     if (filters?.contactName) params.append('contactName', filters.contactName);
+    if (filters?.userId) params.append('userId', filters.userId);
+    if (filters?.userRole) params.append('userRole', filters.userRole);
     const query = params.toString() ? `?${params.toString()}` : '';
     return request<Patient[]>(`/patients${query}`);
   },
@@ -51,6 +53,9 @@ export const api = {
       status?: Patient["status"];
       contacts?: Contact[];
       userId?: string;
+      userRole?: string;
+      doctorId?: string;
+      nurseId?: string;
     }
   ) => {
     return request<Patient>('/patients', {
@@ -65,6 +70,8 @@ export const api = {
       status?: Patient["status"];
       contacts?: Contact[];
       userId?: string;
+      doctorId?: string;
+      nurseId?: string;
     }
   ) => {
     return request<Patient>(`/patients/${id}`, {
@@ -226,6 +233,14 @@ export const api = {
   listUsers: async (role?: User['role']) => {
     const query = role ? `?role=${encodeURIComponent(role)}` : '';
     return request<User[]>(`/users${query}`);
+  },
+
+  listDoctors: async () => {
+    return request<User[]>(`/users?role=doctor`);
+  },
+
+  listNurses: async () => {
+    return request<User[]>(`/users?role=nurse`);
   },
 
   getUser: async (id: ID) => {

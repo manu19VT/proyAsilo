@@ -6,6 +6,8 @@ interface PatientFilters {
   query?: string;
   status?: "activo" | "baja";
   contactName?: string;
+  userId?: string;
+  userRole?: string;
 }
 
 function calculateAge(birthDate?: string): number | undefined {
@@ -44,6 +46,10 @@ export class PatientService {
       updatedBy: row.updatedBy || undefined,
       createdByName: row.createdByName || undefined,
       updatedByName: row.updatedByName || undefined,
+      doctorId: row.doctorId || undefined,
+      nurseId: row.nurseId || undefined,
+      doctorName: row.doctorName || undefined,
+      nurseName: row.nurseName || undefined,
     };
     return patient;
   }
@@ -69,11 +75,17 @@ export class PatientService {
         p.fecha_actualizacion as updatedAt,
         p.creado_por as createdBy,
         p.actualizado_por as updatedBy,
+        p.doctor_id as doctorId,
+        p.enfermero_id as nurseId,
         u1.nombre as createdByName,
-        u2.nombre as updatedByName
+        u2.nombre as updatedByName,
+        d.nombre as doctorName,
+        e.nombre as nurseName
       FROM patients p
       LEFT JOIN users u1 ON p.creado_por = u1.id
       LEFT JOIN users u2 ON p.actualizado_por = u2.id
+      LEFT JOIN users d ON p.doctor_id = d.id
+      LEFT JOIN users e ON p.enfermero_id = e.id
     `;
 
     const conditions: string[] = [];
@@ -113,6 +125,18 @@ export class PatientService {
       params.contactPhone = `%${filters.contactName}%`;
     }
 
+    // Filtrar por usuario asignado si es doctor o enfermero
+    if (filters?.userId && filters?.userRole) {
+      if (filters.userRole === 'doctor') {
+        conditions.push('p.doctor_id = @userId');
+        params.userId = filters.userId;
+      } else if (filters.userRole === 'nurse') {
+        conditions.push('p.enfermero_id = @userId');
+        params.userId = filters.userId;
+      }
+      // admin y otros roles ven todos los pacientes
+    }
+
     if (conditions.length > 0) {
       sql += ` WHERE ${conditions.join(' AND ')}`;
     }
@@ -150,11 +174,17 @@ export class PatientService {
         p.fecha_actualizacion as updatedAt,
         p.creado_por as createdBy,
         p.actualizado_por as updatedBy,
+        p.doctor_id as doctorId,
+        p.enfermero_id as nurseId,
         u1.nombre as createdByName,
-        u2.nombre as updatedByName
+        u2.nombre as updatedByName,
+        d.nombre as doctorName,
+        e.nombre as nurseName
       FROM patients p
       LEFT JOIN users u1 ON p.creado_por = u1.id
       LEFT JOIN users u2 ON p.actualizado_por = u2.id
+      LEFT JOIN users d ON p.doctor_id = d.id
+      LEFT JOIN users e ON p.enfermero_id = e.id
       WHERE p.id = @id
     `, { id });
     
@@ -166,19 +196,47 @@ export class PatientService {
   }
 
   // Crear nuevo paciente
-  async createPatient(data: Omit<Patient, 'id' | 'contacts' | 'createdAt' | 'updatedAt' | 'createdByName' | 'updatedByName'> & { contacts?: Contact[]; createdBy?: string }): Promise<Patient> {
+  async createPatient(data: Omit<Patient, 'id' | 'contacts' | 'createdAt' | 'updatedAt' | 'createdByName' | 'updatedByName'> & { contacts?: Contact[]; createdBy?: string; doctorId?: string; nurseId?: string; userRole?: string }): Promise<Patient> {
     const id = uuidv4();
     const now = new Date().toISOString();
     const age = data.age ?? calculateAge(data.birthDate);
 
+    // Si el usuario es doctor y no se especificó doctorId, asignar automáticamente
+    let doctorId = data.doctorId || null;
+    let nurseId = data.nurseId || null;
+
+    // Si el creador es un doctor y no se especificó doctorId, asignar automáticamente
+    if (data.userRole === 'doctor' && data.createdBy && !doctorId) {
+      doctorId = data.createdBy;
+    }
+
+    // Si el creador es un enfermero, asignar aleatoriamente doctor y enfermero
+    if (data.userRole === 'nurse' && (!doctorId || !nurseId)) {
+      const { userService } = await import('./UserService');
+      const doctors = await userService.listUsers('doctor');
+      const nurses = await userService.listUsers('nurse');
+      
+      // Asignar doctor aleatorio si no hay uno asignado
+      if (!doctorId && doctors.length > 0) {
+        const randomDoctor = doctors[Math.floor(Math.random() * doctors.length)];
+        doctorId = randomDoctor.id;
+      }
+      
+      // Asignar enfermero aleatorio si no hay uno asignado
+      if (!nurseId && nurses.length > 0) {
+        const randomNurse = nurses[Math.floor(Math.random() * nurses.length)];
+        nurseId = randomNurse.id;
+      }
+    }
+
     await execute(`
       INSERT INTO patients (
         id, nombre, fecha_nacimiento, lugar_nacimiento, edad, direccion, curp, rfc, fecha_ingreso, notas, estado, fecha_baja, motivo_baja,
-        fecha_creacion, fecha_actualizacion, creado_por, actualizado_por
+        fecha_creacion, fecha_actualizacion, creado_por, actualizado_por, doctor_id, enfermero_id
       )
       VALUES (
         @id, @name, @birthDate, @birthPlace, @age, @address, @curp, @rfc, @admissionDate, @notes, @status, NULL, NULL,
-        @createdAt, @updatedAt, @createdBy, @updatedBy
+        @createdAt, @updatedAt, @createdBy, @updatedBy, @doctorId, @nurseId
       )
     `, {
       id,
@@ -196,6 +254,8 @@ export class PatientService {
       updatedAt: now,
       createdBy: data.createdBy || null,
       updatedBy: data.createdBy || null,
+      doctorId: doctorId,
+      nurseId: nurseId,
     });
     
     // Agregar contactos si se proporcionan
@@ -218,7 +278,7 @@ export class PatientService {
   }
 
   // Actualizar paciente
-  async updatePatient(id: ID, data: Partial<Omit<Patient, 'id' | 'createdAt' | 'updatedAt' | 'contacts' | 'createdByName' | 'updatedByName'>> & { updatedBy?: string; contacts?: Contact[] }): Promise<Patient | null> {
+  async updatePatient(id: ID, data: Partial<Omit<Patient, 'id' | 'createdAt' | 'updatedAt' | 'contacts' | 'createdByName' | 'updatedByName'>> & { updatedBy?: string; contacts?: Contact[]; doctorId?: string; nurseId?: string }): Promise<Patient | null> {
     const now = new Date().toISOString();
     const age = data.age ?? calculateAge(data.birthDate);
 
@@ -237,7 +297,9 @@ export class PatientService {
           fecha_baja = COALESCE(@dischargeDate, fecha_baja),
           motivo_baja = COALESCE(@dischargeReason, motivo_baja),
           fecha_actualizacion = @updatedAt,
-          actualizado_por = COALESCE(@updatedBy, actualizado_por)
+          actualizado_por = COALESCE(@updatedBy, actualizado_por),
+          doctor_id = COALESCE(@doctorId, doctor_id),
+          enfermero_id = COALESCE(@nurseId, enfermero_id)
       WHERE id = @id
     `, {
       name: data.name || null,
@@ -254,6 +316,8 @@ export class PatientService {
       dischargeReason: data.dischargeReason || null,
       updatedAt: now,
       updatedBy: data.updatedBy || null,
+      doctorId: data.doctorId !== undefined ? data.doctorId : null,
+      nurseId: data.nurseId !== undefined ? data.nurseId : null,
       id
     });
     
