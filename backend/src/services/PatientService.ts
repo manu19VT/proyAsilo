@@ -137,6 +137,9 @@ export class PatientService {
       // admin y otros roles ven todos los pacientes
     }
 
+    // Filtrar solo registros no eliminados (soft delete)
+    conditions.push('(p.eliminado = 0 OR p.eliminado IS NULL)');
+
     if (conditions.length > 0) {
       sql += ` WHERE ${conditions.join(' AND ')}`;
     }
@@ -186,6 +189,7 @@ export class PatientService {
       LEFT JOIN users d ON p.doctor_id = d.id
       LEFT JOIN users e ON p.enfermero_id = e.id
       WHERE p.id = @id
+        AND (p.eliminado = 0 OR p.eliminado IS NULL)
     `, { id });
     
     if (!row) return null;
@@ -378,9 +382,76 @@ export class PatientService {
     return this.getPatientById(id);
   }
 
-  // Eliminar paciente
-  async deletePatient(id: ID): Promise<boolean> {
-    const rowsAffected = await execute('DELETE FROM patients WHERE id = @id', { id });
+  // Eliminar paciente (SOFT DELETE - con auditoría)
+  async deletePatient(id: ID, userId?: string, userName?: string): Promise<boolean> {
+    // Obtener datos del paciente antes de eliminar para auditoría
+    const patient = await this.getPatientById(id);
+    if (!patient) return false;
+
+    // Registrar en auditoría antes de eliminar
+    try {
+      const { auditService } = await import('./AuditService');
+      await auditService.logAction({
+        tabla_afectada: 'patients',
+        registro_id: id,
+        accion: 'SOFT_DELETE',
+        datos_anteriores: {
+          name: patient.name,
+          birthDate: patient.birthDate,
+          curp: patient.curp,
+          rfc: patient.rfc,
+          status: patient.status,
+          doctorId: patient.doctorId,
+          nurseId: patient.nurseId
+        },
+        usuario_id: userId,
+        usuario_nombre: userName,
+        observaciones: `Paciente marcado como eliminado (soft delete): ${patient.name}`
+      });
+    } catch (error) {
+      console.error('Error al registrar en auditoría:', error);
+      // Continuar con la eliminación aunque falle la auditoría
+    }
+
+    // SOFT DELETE: Marcar como eliminado en lugar de borrar físicamente
+    const rowsAffected = await execute(`
+      UPDATE patients 
+      SET eliminado = 1,
+          fecha_eliminacion = GETDATE(),
+          eliminado_por = @userId,
+          estado = 'baja'
+      WHERE id = @id AND (eliminado = 0 OR eliminado IS NULL)
+    `, { id, userId: userId || null });
+    
+    return rowsAffected > 0;
+  }
+
+  // Restaurar paciente eliminado (soft delete)
+  async restorePatient(id: ID, userId?: string): Promise<boolean> {
+    const rowsAffected = await execute(`
+      UPDATE patients 
+      SET eliminado = 0,
+          fecha_eliminacion = NULL,
+          eliminado_por = NULL,
+          estado = 'activo'
+      WHERE id = @id AND eliminado = 1
+    `, { id });
+
+    if (rowsAffected > 0) {
+      try {
+        const { auditService } = await import('./AuditService');
+        await auditService.logAction({
+          tabla_afectada: 'patients',
+          registro_id: id,
+          accion: 'RESTORE',
+          usuario_id: userId,
+          observaciones: 'Paciente restaurado desde soft delete'
+        });
+      } catch (error) {
+        console.error('Error al registrar restauración en auditoría:', error);
+      }
+    }
+
     return rowsAffected > 0;
   }
 

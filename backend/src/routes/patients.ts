@@ -110,14 +110,29 @@ router.post('/:id/reactivate', async (req, res) => {
   }
 });
 
-// Eliminar paciente
+// Eliminar paciente (soft delete)
 router.delete('/:id', async (req, res) => {
   try {
-    const deleted = await patientService.deletePatient(req.params.id);
+    const { userId, userName } = req.body || {};
+    const deleted = await patientService.deletePatient(req.params.id, userId, userName);
     if (!deleted) {
       return res.status(404).json({ error: 'Paciente no encontrado' });
     }
     res.json({ message: 'Paciente eliminado correctamente' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Restaurar paciente eliminado (soft delete)
+router.post('/:id/restore', async (req, res) => {
+  try {
+    const { userId } = req.body || {};
+    const restored = await patientService.restorePatient(req.params.id, userId);
+    if (!restored) {
+      return res.status(404).json({ error: 'Paciente no encontrado o no está eliminado' });
+    }
+    res.json({ message: 'Paciente restaurado correctamente' });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
