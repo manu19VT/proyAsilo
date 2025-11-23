@@ -80,9 +80,17 @@ export const api = {
     });
   },
 
-  deletePatient: async (id: ID) => {
+  deletePatient: async (id: ID, userId?: string, userName?: string) => {
     return request<void>(`/patients/${id}`, {
       method: 'DELETE',
+      body: JSON.stringify({ userId, userName }),
+    });
+  },
+
+  restorePatient: async (id: ID, userId?: string) => {
+    return request<Patient>(`/patients/${id}/restore`, {
+      method: 'POST',
+      body: JSON.stringify({ userId }),
     });
   },
 

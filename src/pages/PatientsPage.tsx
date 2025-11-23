@@ -30,7 +30,8 @@ import {
   ContactPhone as ContactIcon,
   Inventory2 as InventoryIcon,
   MedicationLiquid as MedicationIcon,
-  Edit as EditIcon
+  Edit as EditIcon,
+  Delete as DeleteIcon
 } from "@mui/icons-material";
 import { AnimatePresence, motion } from "framer-motion";
 import Page from "../components/Page";
@@ -38,6 +39,7 @@ import { Table } from "../components/Table";
 import { api } from "../api/client";
 import { Patient, Contact, PatientMedication, PersonalObject, User } from "../types";
 import { useAuth } from "../contexts/AuthContext";
+import ConfirmDeleteDialog from "../components/ConfirmDeleteDialog";
 
 type StatusTab = "activo" | "baja" | "todos";
 type SearchType = "nombre" | "id" | "contacto" | "curp" | "rfc";
@@ -92,6 +94,9 @@ export default function PatientsPage() {
   const [dischargeDialog, setDischargeDialog] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [dischargeReason, setDischargeReason] = useState("");
+  const [deleteDialog, setDeleteDialog] = useState(false);
+  const [patientToDelete, setPatientToDelete] = useState<Patient | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [detailDialog, setDetailDialog] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailPatient, setDetailPatient] = useState<Patient | null>(null);
@@ -432,6 +437,29 @@ export default function PatientsPage() {
     } catch (error) {
       console.error(error);
       alert("Error al reactivar paciente");
+    }
+  };
+
+  const openDeleteDialog = (patient: Patient) => {
+    setPatientToDelete(patient);
+    setDeleteDialog(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!patientToDelete) return;
+    
+    setDeleteLoading(true);
+    try {
+      await api.deletePatient(patientToDelete.id, user?.id, user?.name);
+      setDeleteDialog(false);
+      setPatientToDelete(null);
+      load();
+      alert("Paciente eliminado correctamente. Puede restaurarse desde la base de datos si es necesario.");
+    } catch (error) {
+      console.error(error);
+      alert("Error al eliminar paciente");
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -847,15 +875,28 @@ export default function PatientsPage() {
                     Editar
                   </Button>
                   {patient.status === "activo" ? (
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      color="error"
-                      startIcon={<PersonOffIcon />}
-                      onClick={() => openDischargeDialog(patient)}
-                    >
-                      Dar de baja
-                    </Button>
+                    <>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="error"
+                        startIcon={<PersonOffIcon />}
+                        onClick={() => openDischargeDialog(patient)}
+                      >
+                        Dar de baja
+                      </Button>
+                      {user?.role === "admin" && (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color="error"
+                          startIcon={<DeleteIcon />}
+                          onClick={() => openDeleteDialog(patient)}
+                        >
+                          Eliminar
+                        </Button>
+                      )}
+                    </>
                   ) : (
                     <Button
                       size="small"
@@ -1152,6 +1193,27 @@ export default function PatientsPage() {
           <Button onClick={closeDetailDialog}>Cerrar</Button>
         </DialogActions>
       </Dialog>
+
+      {/* Diálogo de confirmación para eliminar */}
+      <ConfirmDeleteDialog
+        open={deleteDialog}
+        onClose={() => {
+          setDeleteDialog(false);
+          setPatientToDelete(null);
+        }}
+        onConfirm={handleConfirmDelete}
+        title="Eliminar Paciente"
+        itemName={patientToDelete?.name || ""}
+        itemType="Paciente"
+        warningMessage="Esta acción ocultará el paciente de todas las listas. El registro se mantendrá en la base de datos y puede restaurarse si es necesario."
+        details={patientToDelete ? [
+          { label: "ID", value: patientToDelete.id },
+          { label: "Nombre", value: patientToDelete.name },
+          { label: "CURP", value: patientToDelete.curp || "No registrado" },
+          { label: "Estado actual", value: patientToDelete.status === "activo" ? "Activo" : "Baja" }
+        ] : []}
+        loading={deleteLoading}
+      />
 
       <Dialog
         open={dischargeDialog}
