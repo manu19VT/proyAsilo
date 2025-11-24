@@ -25,6 +25,9 @@ export default function MedsPage() {
   const { user } = useAuth();
   const [items, setItems] = useState<Medication[]>([]);
   const [filteredItems, setFilteredItems] = useState<Medication[]>([]);
+  
+  // Roles que pueden agregar medicamentos: admin, doctor, nurse
+  const canAddMedication = user?.role === 'admin' || user?.role === 'doctor' || user?.role === 'nurse';
 
   const [searchQuery, setSearchQuery] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -135,14 +138,22 @@ export default function MedsPage() {
     <Page>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
         <Typography variant="h5" fontWeight={700}>Medicamentos</Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => setShowForm(!showForm)}
-        >
-          {showForm ? "Cancelar" : "Nuevo Medicamento"}
-        </Button>
+        {canAddMedication && (
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setShowForm(!showForm)}
+          >
+            {showForm ? "Cancelar" : "Nuevo Medicamento"}
+          </Button>
+        )}
       </Stack>
+      
+      {!canAddMedication && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Solo administradores, doctores y enfermeras pueden agregar medicamentos.
+        </Alert>
+      )}
 
       {expiredCount > 0 && (
         <Alert severity="error" icon={<WarningIcon />} sx={{ mb: 2 }}>
@@ -174,7 +185,7 @@ export default function MedsPage() {
         />
       </Paper>
 
-      {showForm && (
+      {canAddMedication && showForm && (
         <Paper sx={{ p: 2, mb: 2 }}>
           <Typography variant="h6" gutterBottom>Nuevo Medicamento</Typography>
           <Stack spacing={2}>
