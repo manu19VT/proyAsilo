@@ -1,5 +1,6 @@
 import express from 'express';
 import { medicationService } from '../services/MedicationService';
+import { userService } from '../services/UserService';
 
 const router = express.Router();
 
@@ -27,13 +28,26 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Crear medicamento
+// Crear medicamento (solo admin, doctor, nurse)
 router.post('/', async (req, res) => {
   try {
+    const { userId } = req.body || {};
+    
+    // Validar que el usuario tenga permiso (admin, doctor, nurse)
+    if (userId) {
+      const user = await userService.getUserById(userId);
+      if (user) {
+        const allowedRoles = ['admin', 'doctor', 'nurse'];
+        if (!allowedRoles.includes(user.role)) {
+          return res.status(403).json({ error: 'Solo administradores, doctores y enfermeras pueden agregar medicamentos' });
+        }
+      }
+    }
+    
     // El frontend debe enviar userId en el body: { ..., userId: "..." }
     const medication = await medicationService.createMedication({
       ...req.body,
-      createdBy: req.body.userId || null
+      createdBy: userId || null
     });
     res.status(201).json(medication);
   } catch (error: any) {
