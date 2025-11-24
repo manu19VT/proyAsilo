@@ -70,9 +70,33 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// Eliminar usuario
+// Eliminar usuario (requiere confirmar contraseña del usuario a eliminar)
 router.delete('/:id', async (req, res) => {
   try {
+    const { password } = req.body || {};
+    
+    if (!password || typeof password !== 'string') {
+      return res.status(400).json({ error: 'Se requiere la contraseña del usuario para eliminarlo' });
+    }
+
+    // Obtener el usuario a eliminar
+    const userToDelete = await userService.getUserById(req.params.id);
+    if (!userToDelete || !userToDelete.email) {
+      return res.status(404).json({ error: 'Usuario no encontrado o sin correo asociado' });
+    }
+
+    // Verificar la contraseña del usuario a eliminar
+    const crypto = await import('crypto');
+    const hash = crypto.createHash('sha256');
+    hash.update(`${userToDelete.email.toLowerCase()}::${password}`);
+    const passwordHash = hash.digest('hex');
+
+    const verifiedUser = await userService.verifyPassword(userToDelete.email, passwordHash);
+    if (!verifiedUser) {
+      return res.status(401).json({ error: 'Contraseña incorrecta. No se puede eliminar el usuario.' });
+    }
+
+    // Si la contraseña es correcta, eliminar el usuario
     const deleted = await userService.deleteUser(req.params.id);
     if (!deleted) {
       return res.status(404).json({ error: 'Usuario no encontrado' });
@@ -85,9 +109,14 @@ router.delete('/:id', async (req, res) => {
 
 router.post('/:id/change-password', async (req, res) => {
   try {
-    const { password, requireChange } = req.body || {};
-    if (!password || typeof password !== 'string') {
-      return res.status(400).json({ error: 'password es requerido' });
+    const { currentPassword, newPassword, requireChange } = req.body || {};
+    
+    if (!currentPassword || typeof currentPassword !== 'string') {
+      return res.status(400).json({ error: 'La contraseña actual es requerida' });
+    }
+    
+    if (!newPassword || typeof newPassword !== 'string') {
+      return res.status(400).json({ error: 'La nueva contraseña es requerida' });
     }
 
     const user = await userService.getUserById(req.params.id);
@@ -95,12 +124,23 @@ router.post('/:id/change-password', async (req, res) => {
       return res.status(404).json({ error: 'Usuario no encontrado o sin correo asociado' });
     }
 
+    // Verificar la contraseña actual
     const crypto = await import('crypto');
-    const hash = crypto.createHash('sha256');
-    hash.update(`${user.email.toLowerCase()}::${password}`);
-    const passwordHash = hash.digest('hex');
+    const currentHash = crypto.createHash('sha256');
+    currentHash.update(`${user.email.toLowerCase()}::${currentPassword}`);
+    const currentPasswordHash = currentHash.digest('hex');
 
-    const updated = await userService.updatePassword(req.params.id, passwordHash, !!requireChange);
+    const verifiedUser = await userService.verifyPassword(user.email, currentPasswordHash);
+    if (!verifiedUser) {
+      return res.status(401).json({ error: 'Contraseña actual incorrecta' });
+    }
+
+    // Si la contraseña actual es correcta, actualizar a la nueva contraseña
+    const newHash = crypto.createHash('sha256');
+    newHash.update(`${user.email.toLowerCase()}::${newPassword}`);
+    const newPasswordHash = newHash.digest('hex');
+
+    const updated = await userService.updatePassword(req.params.id, newPasswordHash, !!requireChange);
     if (!updated) {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }

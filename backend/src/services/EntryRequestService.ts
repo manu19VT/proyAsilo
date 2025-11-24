@@ -174,7 +174,7 @@ export class EntryRequestService {
               dosage: item.dosisRecomendada,
               frequency: item.frecuencia,
               prescribedAt: now,
-              prescribedBy: data.userId || null,
+              prescribedBy: data.userId || undefined,
               cantidad: item.qty
             });
           } catch (error) {

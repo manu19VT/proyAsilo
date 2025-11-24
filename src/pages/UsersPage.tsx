@@ -67,8 +67,12 @@ export default function UsersPage() {
 
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [changePasswordDialog, setChangePasswordDialog] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  
+  const [deleteDialog, setDeleteDialog] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
 
   const load = async () => {
     try {
@@ -135,13 +139,26 @@ export default function UsersPage() {
 
   const handleDeleteUser = async (user: User) => {
     if (!isAdmin) return;
-    if (!window.confirm(`¿Eliminar la cuenta de ${user.name}?`)) return;
+    setSelectedUser(user);
+    setDeletePassword("");
+    setDeleteDialog(true);
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!selectedUser || !deletePassword.trim()) {
+      alert("Por favor ingresa la contraseña del usuario para confirmar la eliminación");
+      return;
+    }
     try {
-      await api.deleteUser(user.id);
+      await api.deleteUser(selectedUser.id, deletePassword);
+      alert("Usuario eliminado correctamente");
+      setDeleteDialog(false);
+      setDeletePassword("");
+      setSelectedUser(null);
       load();
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert("Error al eliminar usuario");
+      alert(error?.message || "Error al eliminar usuario. Verifica que la contraseña sea correcta.");
     }
   };
 
@@ -164,28 +181,41 @@ export default function UsersPage() {
 
   const openChangePassword = (user: User) => {
     setSelectedUser(user);
+    setCurrentPassword("");
     setNewPassword("");
     setConfirmPassword("");
     setChangePasswordDialog(true);
   };
 
   const handleChangePassword = async () => {
-    if (!selectedUser || !newPassword.trim() || newPassword !== confirmPassword) {
-      alert("Las contraseñas no coinciden");
+    if (!selectedUser || !currentPassword.trim()) {
+      alert("Por favor ingresa la contraseña actual");
+      return;
+    }
+    if (!newPassword.trim() || newPassword !== confirmPassword) {
+      alert("Las contraseñas nuevas no coinciden");
       return;
     }
     if (newPassword.length < 8) {
       alert("La contraseña debe tener al menos 8 caracteres");
       return;
     }
+    if (currentPassword === newPassword) {
+      alert("La nueva contraseña debe ser diferente a la actual");
+      return;
+    }
     try {
-      await api.changePassword(selectedUser.id, newPassword, false);
+      await api.changePassword(selectedUser.id, currentPassword, newPassword, false);
       alert("Contraseña actualizada correctamente");
       setChangePasswordDialog(false);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setSelectedUser(null);
       load();
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert("Error al cambiar contraseña");
+      alert(error?.message || "Error al cambiar contraseña. Verifica que la contraseña actual sea correcta.");
     }
   };
 
@@ -424,7 +454,12 @@ export default function UsersPage() {
 
       <Dialog
         open={changePasswordDialog}
-        onClose={() => setChangePasswordDialog(false)}
+        onClose={() => {
+          setChangePasswordDialog(false);
+          setCurrentPassword("");
+          setNewPassword("");
+          setConfirmPassword("");
+        }}
         maxWidth="xs"
         fullWidth
       >
@@ -435,6 +470,15 @@ export default function UsersPage() {
               Usuario: <strong>{selectedUser?.name}</strong>
             </Alert>
             <TextField
+              label="Contraseña actual *"
+              type="password"
+              size="small"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              fullWidth
+              helperText="Ingresa la contraseña actual para confirmar"
+            />
+            <TextField
               label="Nueva contraseña *"
               type="password"
               size="small"
@@ -444,7 +488,7 @@ export default function UsersPage() {
               helperText="Mínimo 8 caracteres"
             />
             <TextField
-              label="Confirmar contraseña *"
+              label="Confirmar nueva contraseña *"
               type="password"
               size="small"
               value={confirmPassword}
@@ -460,17 +504,69 @@ export default function UsersPage() {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setChangePasswordDialog(false)}>Cancelar</Button>
+          <Button onClick={() => {
+            setChangePasswordDialog(false);
+            setCurrentPassword("");
+            setNewPassword("");
+            setConfirmPassword("");
+          }}>Cancelar</Button>
           <Button
             variant="contained"
             onClick={handleChangePassword}
             disabled={
+              !currentPassword.trim() ||
               !newPassword.trim() ||
               newPassword !== confirmPassword ||
-              newPassword.length < 8
+              newPassword.length < 8 ||
+              currentPassword === newPassword
             }
           >
             Cambiar Contraseña
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={deleteDialog}
+        onClose={() => {
+          setDeleteDialog(false);
+          setDeletePassword("");
+          setSelectedUser(null);
+        }}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Eliminar usuario</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Alert severity="warning">
+              Esta acción no se puede deshacer. Se eliminará permanentemente la cuenta de <strong>{selectedUser?.name}</strong>.
+            </Alert>
+            <TextField
+              label="Contraseña del usuario *"
+              type="password"
+              size="small"
+              value={deletePassword}
+              onChange={(e) => setDeletePassword(e.target.value)}
+              fullWidth
+              helperText="Ingresa la contraseña del usuario para confirmar la eliminación"
+              autoFocus
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => {
+            setDeleteDialog(false);
+            setDeletePassword("");
+            setSelectedUser(null);
+          }}>Cancelar</Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={confirmDeleteUser}
+            disabled={!deletePassword.trim()}
+          >
+            Eliminar Usuario
           </Button>
         </DialogActions>
       </Dialog>
