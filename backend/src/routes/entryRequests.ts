@@ -6,8 +6,24 @@ const router = express.Router();
 // Listar solicitudes
 router.get('/', async (req, res) => {
   try {
-    const entryRequests = await entryRequestService.listEntryRequests();
+    const { type, patientId } = req.query as { type?: string; patientId?: string };
+    const entryRequests = await entryRequestService.listEntryRequests({
+      type: type === 'entrada' || type === 'salida' ? type : undefined,
+      patientId: patientId || undefined
+    });
     res.json(entryRequests);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/folio/:folio', async (req, res) => {
+  try {
+    const entryRequest = await entryRequestService.getEntryRequestByFolio(req.params.folio);
+    if (!entryRequest) {
+      return res.status(404).json({ error: 'Solicitud no encontrada' });
+    }
+    res.json(entryRequest);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -29,7 +45,25 @@ router.get('/:id', async (req, res) => {
 // Crear solicitud
 router.post('/', async (req, res) => {
   try {
-    const entryRequest = await entryRequestService.createEntryRequest(req.body);
+    const { type, patientId, items, status, dueDate, userId } = req.body || {};
+    if (!type || (type !== 'entrada' && type !== 'salida')) {
+      return res.status(400).json({ error: 'type debe ser "entrada" o "salida"' });
+    }
+    if (!patientId) {
+      return res.status(400).json({ error: 'patientId es requerido' });
+    }
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Debe incluir al menos un item' });
+    }
+
+    const entryRequest = await entryRequestService.createEntryRequest({
+      type,
+      patientId,
+      items,
+      status: status || 'completa',
+      dueDate,
+      userId
+    });
     res.status(201).json(entryRequest);
   } catch (error: any) {
     res.status(400).json({ error: error.message });

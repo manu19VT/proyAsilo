@@ -7,22 +7,24 @@ export class PersonalObjectService {
   async listPersonalObjects(patientId?: ID): Promise<PersonalObject[]> {
     let sql = `
       SELECT 
-        id,
-        patient_id as patientId,
-        name,
-        qty,
-        received_at as receivedAt
-      FROM personal_objects
+        po.id,
+        po.paciente_id as patientId,
+        po.nombre as name,
+        po.cantidad as qty,
+        po.fecha_recepcion as receivedAt,
+        p.nombre as patientName
+      FROM personal_objects po
+      LEFT JOIN patients p ON po.paciente_id = p.id
     `;
     
     const params: Record<string, any> = {};
     
     if (patientId) {
-      sql += ' WHERE patient_id = @patientId';
+      sql += ' WHERE paciente_id = @patientId';
       params.patientId = patientId;
     }
     
-    sql += ' ORDER BY received_at DESC';
+    sql += ' ORDER BY fecha_recepcion DESC';
     
     const objects = await query<PersonalObject>(sql, params);
     return objects;
@@ -32,15 +34,17 @@ export class PersonalObjectService {
   async getPersonalObjectById(id: ID): Promise<PersonalObject | null> {
     const obj = await queryOne<PersonalObject>(`
       SELECT 
-        id,
-        patient_id as patientId,
-        name,
-        qty,
-        received_at as receivedAt
-      FROM personal_objects 
-      WHERE id = @id
+        po.id,
+        po.paciente_id as patientId,
+        po.nombre as name,
+        po.cantidad as qty,
+        po.fecha_recepcion as receivedAt,
+        p.nombre as patientName
+      FROM personal_objects po
+      LEFT JOIN patients p ON po.paciente_id = p.id
+      WHERE po.id = @id
     `, { id });
-    return obj;
+    return obj || null;
   }
 
   // Crear objeto personal
@@ -49,7 +53,7 @@ export class PersonalObjectService {
     const now = new Date().toISOString();
     
     await execute(`
-      INSERT INTO personal_objects (id, patient_id, name, qty, received_at)
+      INSERT INTO personal_objects (id, paciente_id, nombre, cantidad, fecha_recepcion)
       VALUES (@id, @patientId, @name, @qty, @receivedAt)
     `, {
       id,
@@ -70,9 +74,9 @@ export class PersonalObjectService {
     
     await execute(`
       UPDATE personal_objects 
-      SET patient_id = COALESCE(@patientId, patient_id),
-          name = COALESCE(@name, name),
-          qty = COALESCE(@qty, qty)
+      SET paciente_id = COALESCE(@patientId, paciente_id),
+          nombre = COALESCE(@name, nombre),
+          cantidad = COALESCE(@qty, cantidad)
       WHERE id = @id
     `, {
       patientId: data.patientId || null,

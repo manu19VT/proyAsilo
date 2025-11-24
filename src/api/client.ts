@@ -1,4 +1,4 @@
-import { ID, Patient, Contact, Medication, EntryRequest, PersonalObject, User } from "../types";
+import { ID, Patient, Contact, Medication, EntryRequest, PersonalObject, User, PatientMedication } from "../types";
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
@@ -32,16 +32,15 @@ export const api = {
     });
   },
 
-  register: async (payload: { name: string; role: User['role']; email: string }) => {
-    return request<{ user: User; password: string }>(`/auth/register`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-  },
-
   // ========== Pacientes ==========
-  listPatients: async (q?: string) => {
-    const query = q ? `?q=${encodeURIComponent(q)}` : '';
+  listPatients: async (filters?: { query?: string; status?: "activo" | "baja"; contactName?: string; userId?: string; userRole?: string }) => {
+    const params = new URLSearchParams();
+    if (filters?.query) params.append('q', filters.query);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.contactName) params.append('contactName', filters.contactName);
+    if (filters?.userId) params.append('userId', filters.userId);
+    if (filters?.userRole) params.append('userRole', filters.userRole);
+    const query = params.toString() ? `?${params.toString()}` : '';
     return request<Patient[]>(`/patients${query}`);
   },
 
@@ -49,23 +48,63 @@ export const api = {
     return request<Patient>(`/patients/${id}`);
   },
 
-  addPatient: async (p: Omit<Patient, "id" | "contacts"> & { contacts?: Contact[] }) => {
+  addPatient: async (
+    p: Omit<Patient, "id" | "contacts" | "status"> & {
+      status?: Patient["status"];
+      contacts?: Contact[];
+      userId?: string;
+      userRole?: string;
+      doctorId?: string;
+      nurseId?: string;
+    }
+  ) => {
     return request<Patient>('/patients', {
       method: 'POST',
       body: JSON.stringify(p),
     });
   },
 
-  updatePatient: async (id: ID, p: Partial<Omit<Patient, "id" | "contacts"> & { contacts?: Contact[] }>) => {
+  updatePatient: async (
+    id: ID,
+    p: Partial<Omit<Patient, "id" | "contacts" | "status">> & {
+      status?: Patient["status"];
+      contacts?: Contact[];
+      userId?: string;
+      doctorId?: string;
+      nurseId?: string;
+    }
+  ) => {
     return request<Patient>(`/patients/${id}`, {
       method: 'PUT',
       body: JSON.stringify(p),
     });
   },
 
-  deletePatient: async (id: ID) => {
+  deletePatient: async (id: ID, userId?: string, userName?: string) => {
     return request<void>(`/patients/${id}`, {
       method: 'DELETE',
+      body: JSON.stringify({ userId, userName }),
+    });
+  },
+
+  restorePatient: async (id: ID, userId?: string) => {
+    return request<Patient>(`/patients/${id}/restore`, {
+      method: 'POST',
+      body: JSON.stringify({ userId }),
+    });
+  },
+
+  dischargePatient: async (id: ID, reason: string, userId?: string) => {
+    return request<Patient>(`/patients/${id}/discharge`, {
+      method: 'POST',
+      body: JSON.stringify({ reason, userId }),
+    });
+  },
+
+  reactivatePatient: async (id: ID, userId?: string) => {
+    return request<Patient>(`/patients/${id}/reactivate`, {
+      method: 'POST',
+      body: JSON.stringify({ userId }),
     });
   },
 
@@ -91,22 +130,23 @@ export const api = {
   },
 
   // ========== Medicamentos ==========
-  listMeds: async () => {
-    return request<Medication[]>('/medications');
+  listMeds: async (query?: string) => {
+    const qs = query ? `?q=${encodeURIComponent(query)}` : '';
+    return request<Medication[]>(`/medications${qs}`);
   },
 
   getMed: async (id: ID) => {
     return request<Medication>(`/medications/${id}`);
   },
 
-  addMed: async (m: Omit<Medication, "id">) => {
+  addMed: async (m: Omit<Medication, "id"> & { userId?: string }) => {
     return request<Medication>('/medications', {
       method: 'POST',
       body: JSON.stringify(m),
     });
   },
 
-  updateMed: async (id: ID, m: Partial<Omit<Medication, "id">>) => {
+  updateMed: async (id: ID, m: Partial<Omit<Medication, "id">> & { userId?: string }) => {
     return request<Medication>(`/medications/${id}`, {
       method: 'PUT',
       body: JSON.stringify(m),
@@ -119,23 +159,42 @@ export const api = {
     });
   },
 
+  getPatientMedications: async (patientId: ID) => {
+    return request<PatientMedication[]>(`/patient-medications/patients/${patientId}`);
+  },
+
+  addPatientMedication: async (payload: Omit<PatientMedication, "id">) => {
+    return request<PatientMedication>('/patient-medications', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
   // ========== Solicitudes de Entrada ==========
-  listEntries: async () => {
-    return request<EntryRequest[]>('/entry-requests');
+  listEntries: async (filters?: { type?: "entrada" | "salida"; patientId?: ID }) => {
+    const params = new URLSearchParams();
+    if (filters?.type) params.append('type', filters.type);
+    if (filters?.patientId) params.append('patientId', filters.patientId);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return request<EntryRequest[]>(`/entry-requests${query}`);
   },
 
   getEntry: async (id: ID) => {
     return request<EntryRequest>(`/entry-requests/${id}`);
   },
 
-  addEntry: async (e: Omit<EntryRequest, "id" | "createdAt">) => {
+  getEntryByFolio: async (folio: string) => {
+    return request<EntryRequest>(`/entry-requests/folio/${folio}`);
+  },
+
+  addEntry: async (e: Omit<EntryRequest, "id" | "createdAt" | "folio"> & { userId?: string }) => {
     return request<EntryRequest>('/entry-requests', {
       method: 'POST',
       body: JSON.stringify(e),
     });
   },
 
-  updateEntry: async (id: ID, e: Partial<Omit<EntryRequest, "id" | "createdAt">>) => {
+  updateEntry: async (id: ID, e: Partial<Omit<EntryRequest, "id" | "createdAt" | "folio">>) => {
     return request<EntryRequest>(`/entry-requests/${id}`, {
       method: 'PUT',
       body: JSON.stringify(e),
@@ -179,18 +238,34 @@ export const api = {
   },
 
   // ========== Usuarios ==========
-  listUsers: async () => {
-    return request<User[]>('/users');
+  listUsers: async (role?: User['role']) => {
+    const query = role ? `?role=${encodeURIComponent(role)}` : '';
+    return request<User[]>(`/users${query}`);
+  },
+
+  listDoctors: async () => {
+    return request<User[]>(`/users?role=doctor`);
+  },
+
+  listNurses: async () => {
+    return request<User[]>(`/users?role=nurse`);
   },
 
   getUser: async (id: ID) => {
     return request<User>(`/users/${id}`);
   },
 
-  addUser: async (u: Omit<User, "id">) => {
+  addUser: async (payload: {
+    name: string;
+    role: User['role'];
+    email: string;
+    password: string;
+    age?: number;
+    birthDate?: string;
+  }) => {
     return request<User>('/users', {
       method: 'POST',
-      body: JSON.stringify(u),
+      body: JSON.stringify(payload),
     });
   },
 
@@ -204,6 +279,13 @@ export const api = {
   deleteUser: async (id: ID) => {
     return request<void>(`/users/${id}`, {
       method: 'DELETE',
+    });
+  },
+
+  changePassword: async (userId: ID, password: string, requireChange = false) => {
+    return request<User>(`/users/${userId}/change-password`, {
+      method: 'POST',
+      body: JSON.stringify({ password, requireChange }),
     });
   },
 };
