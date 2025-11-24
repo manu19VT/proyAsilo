@@ -476,6 +476,7 @@ export default function UsersPage() {
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               fullWidth
+              autoFocus
               helperText="Ingresa la contraseña actual para confirmar"
             />
             <TextField
@@ -485,7 +486,12 @@ export default function UsersPage() {
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               fullWidth
-              helperText="Mínimo 8 caracteres"
+              error={newPassword.length > 0 && newPassword.length < 8}
+              helperText={
+                newPassword.length > 0 && newPassword.length < 8
+                  ? "La contraseña debe tener al menos 8 caracteres"
+                  : "Mínimo 8 caracteres"
+              }
             />
             <TextField
               label="Confirmar nueva contraseña *"
@@ -498,9 +504,16 @@ export default function UsersPage() {
               helperText={
                 confirmPassword.length > 0 && newPassword !== confirmPassword
                   ? "Las contraseñas no coinciden"
+                  : confirmPassword.length > 0 && newPassword === confirmPassword && newPassword.length >= 8
+                  ? "✓ Las contraseñas coinciden"
                   : ""
               }
             />
+            {currentPassword && newPassword && currentPassword === newPassword && (
+              <Alert severity="warning">
+                La nueva contraseña debe ser diferente a la contraseña actual
+              </Alert>
+            )}
           </Stack>
         </DialogContent>
         <DialogActions>
@@ -518,7 +531,7 @@ export default function UsersPage() {
               !newPassword.trim() ||
               newPassword !== confirmPassword ||
               newPassword.length < 8 ||
-              currentPassword === newPassword
+              currentPassword.trim() === newPassword.trim()
             }
           >
             Cambiar Contraseña
@@ -542,14 +555,17 @@ export default function UsersPage() {
             <Alert severity="warning">
               Esta acción no se puede deshacer. Se eliminará permanentemente la cuenta de <strong>{selectedUser?.name}</strong>.
             </Alert>
+            <Alert severity="info">
+              Se necesita un administrador para esto
+            </Alert>
             <TextField
-              label="Contraseña del usuario *"
+              label="Contraseña de administrador *"
               type="password"
               size="small"
               value={deletePassword}
               onChange={(e) => setDeletePassword(e.target.value)}
               fullWidth
-              helperText="Ingresa la contraseña del usuario para confirmar la eliminación"
+              helperText="Ingresa la contraseña de administrador para confirmar la eliminación"
               autoFocus
             />
           </Stack>

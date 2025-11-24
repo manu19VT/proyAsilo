@@ -85,6 +85,31 @@ export class UserService {
     } as User;
   }
 
+  // Buscar usuario por nombre (útil para buscar administradores específicos)
+  async getUserByName(name: string): Promise<User | null> {
+    const user = await queryOne<User>(`
+      SELECT 
+        id,
+        nombre as name,
+        rol as role,
+        email,
+        fecha_creacion as createdAt,
+        edad as age,
+        fecha_nacimiento as birthDate,
+        cambio_contraseña_requerido as passwordChangeRequired
+      FROM users 
+      WHERE LOWER(nombre) = LOWER(@name)
+    `, { name });
+    return user
+      ? {
+          ...user,
+          age: user.age ?? undefined,
+          birthDate: user.birthDate ?? undefined,
+          passwordChangeRequired: !!user.passwordChangeRequired
+        }
+      : null;
+  }
+
   // Validar rol
   private validateRole(role: string | undefined | null): string {
     const validRoles = ['admin', 'nurse', 'doctor', 'usuario', 'reception'];
