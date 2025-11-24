@@ -276,16 +276,17 @@ export const api = {
     });
   },
 
-  deleteUser: async (id: ID) => {
+  deleteUser: async (id: ID, password: string) => {
     return request<void>(`/users/${id}`, {
       method: 'DELETE',
+      body: JSON.stringify({ password }),
     });
   },
 
-  changePassword: async (userId: ID, password: string, requireChange = false) => {
+  changePassword: async (userId: ID, currentPassword: string, newPassword: string, requireChange = false) => {
     return request<User>(`/users/${userId}/change-password`, {
       method: 'POST',
-      body: JSON.stringify({ password, requireChange }),
+      body: JSON.stringify({ currentPassword, newPassword, requireChange }),
     });
   },
 };
