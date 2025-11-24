@@ -70,33 +70,43 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// Eliminar usuario (requiere confirmar contraseña del usuario a eliminar)
+// Eliminar usuario (requiere confirmar contraseña de un administrador - Rick)
 router.delete('/:id', async (req, res) => {
   try {
     const { password } = req.body || {};
     
     if (!password || typeof password !== 'string') {
-      return res.status(400).json({ error: 'Se requiere la contraseña del usuario para eliminarlo' });
+      return res.status(400).json({ error: 'Se requiere la contraseña de un administrador para eliminar usuarios' });
     }
 
-    // Obtener el usuario a eliminar
-    const userToDelete = await userService.getUserById(req.params.id);
-    if (!userToDelete || !userToDelete.email) {
-      return res.status(404).json({ error: 'Usuario no encontrado o sin correo asociado' });
+    // Buscar el usuario Rick (administrador) - primero por nombre, luego por email
+    let adminUser = await userService.getUserByName('Rick');
+    if (!adminUser || adminUser.role !== 'admin') {
+      // Si no se encuentra por nombre, intentar por email
+      adminUser = await userService.getUserByEmail('r@r.com');
+    }
+    if (!adminUser || adminUser.role !== 'admin') {
+      return res.status(403).json({ error: 'No se encontró un administrador válido' });
     }
 
-    // Verificar la contraseña del usuario a eliminar
+    // Verificar la contraseña del administrador Rick
     const crypto = await import('crypto');
     const hash = crypto.createHash('sha256');
-    hash.update(`${userToDelete.email.toLowerCase()}::${password}`);
+    hash.update(`${adminUser.email!.toLowerCase()}::${password}`);
     const passwordHash = hash.digest('hex');
 
-    const verifiedUser = await userService.verifyPassword(userToDelete.email, passwordHash);
-    if (!verifiedUser) {
-      return res.status(401).json({ error: 'Contraseña incorrecta. No se puede eliminar el usuario.' });
+    const verifiedAdmin = await userService.verifyPassword(adminUser.email!, passwordHash);
+    if (!verifiedAdmin) {
+      return res.status(401).json({ error: 'Contraseña de administrador incorrecta' });
     }
 
-    // Si la contraseña es correcta, eliminar el usuario
+    // Verificar que el usuario a eliminar existe
+    const userToDelete = await userService.getUserById(req.params.id);
+    if (!userToDelete) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    // Si la contraseña del admin es correcta, eliminar el usuario
     const deleted = await userService.deleteUser(req.params.id);
     if (!deleted) {
       return res.status(404).json({ error: 'Usuario no encontrado' });
