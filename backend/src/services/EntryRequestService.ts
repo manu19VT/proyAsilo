@@ -37,25 +37,31 @@ export class EntryRequestService {
   async listEntryRequests(filters?: EntryFilters): Promise<EntryRequest[]> {
     let sql = `
       SELECT 
-        id,
-        folio,
-        tipo as type,
-        paciente_id as patientId,
-        fecha_creacion as createdAt,
-        estado as status,
-        fecha_vencimiento as dueDate
-      FROM entry_requests
+        er.id,
+        er.folio,
+        er.tipo as type,
+        er.paciente_id as patientId,
+        er.fecha_creacion as createdAt,
+        er.estado as status,
+        er.fecha_vencimiento as dueDate,
+        ei.medicamento_id as medicationId,
+        ei.cantidad as qty,
+        ei.dosis_recomendada as dosisRecomendada,
+        ei.frecuencia as frecuencia,
+        ei.fecha_caducidad as fechaCaducidad
+      FROM entry_requests er
+      LEFT JOIN entry_items ei ON er.id = ei.solicitud_id
     `;
     const params: Record<string, any> = {};
     const conditions: string[] = [];
 
     if (filters?.type) {
-      conditions.push('tipo = @type');
+      conditions.push('er.tipo = @type');
       params.type = filters.type;
     }
 
     if (filters?.patientId) {
-      conditions.push('paciente_id = @patientId');
+      conditions.push('er.paciente_id = @patientId');
       params.patientId = filters.patientId;
     }
 
@@ -63,14 +69,50 @@ export class EntryRequestService {
       sql += ` WHERE ${conditions.join(' AND ')}`;
     }
 
-    sql += ' ORDER BY fecha_creacion DESC';
+    sql += ' ORDER BY er.fecha_creacion DESC, ei.medicamento_id';
 
     const rows = await query<any>(sql, params);
-    const entries = await Promise.all(rows.map(async (row) => {
-      const items = await this.getItemsByEntryId(row.id);
-      return this.mapRow(row, items);
-    }));
-    return entries;
+    
+    // Agrupar items por entrada
+    const entriesMap = new Map<string, {
+      id: string;
+      folio: string;
+      type: "entrada" | "salida";
+      patientId: string;
+      createdAt: string;
+      status: "completa" | "incompleta";
+      dueDate?: string;
+      items: { medicationId: ID; qty: number; dosisRecomendada?: string; frecuencia?: string; fechaCaducidad?: string }[];
+    }>();
+
+    for (const row of rows) {
+      if (!entriesMap.has(row.id)) {
+        entriesMap.set(row.id, {
+          id: row.id,
+          folio: row.folio,
+          type: row.type,
+          patientId: row.patientId,
+          createdAt: row.createdAt,
+          status: row.status,
+          dueDate: row.dueDate || undefined,
+          items: []
+        });
+      }
+
+      const entry = entriesMap.get(row.id)!;
+      // Solo agregar item si existe (puede ser null por el LEFT JOIN)
+      if (row.medicationId) {
+        entry.items.push({
+          medicationId: row.medicationId,
+          qty: row.qty,
+          dosisRecomendada: row.dosisRecomendada || undefined,
+          frecuencia: row.frecuencia || undefined,
+          fechaCaducidad: row.fechaCaducidad || undefined
+        });
+      }
+    }
+
+    return Array.from(entriesMap.values()).map(entry => this.mapRow(entry, entry.items));
   }
 
   async getEntryRequestById(id: ID): Promise<EntryRequest | null> {

@@ -1,14 +1,11 @@
 #  Eliminación de Datos
 
-## Resumen
-
-Este documento describe las mejores prácticas implementadas para manejar eliminaciones de datos de forma segura en el sistema.
 
 ## Estrategias Implementadas
 
 ### Sistema de Auditoría
 
-Se ha creado una tabla `audit_log` que registra:
+Se crea una tabla `audit_log` que registra:
 - **Quién** eliminó (usuario_id, usuario_nombre)
 - **Qué** se eliminó (tabla_afectada, registro_id)
 - **Cuándo** se eliminó (fecha_accion)
@@ -23,7 +20,7 @@ Se ha creado una tabla `audit_log` que registra:
 
 ### Triggers de Seguridad
 
-Se implementaron triggers en SQL Server que:
+Se implementaron triggers en SQL Server:
 - **Interceptan** eliminaciones antes de ejecutarse
 - **Registran** automáticamente en audit_log
 - **Validan** dependencias (ej: no eliminar usuario con pacientes asignados)

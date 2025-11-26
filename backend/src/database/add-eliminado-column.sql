@@ -16,6 +16,7 @@ BEGIN
 END
 GO
 
+
 -- Actualizar todos los registros existentes a eliminado = 0 (no eliminados)
 UPDATE patients SET eliminado = 0 WHERE eliminado IS NULL;
 GO
