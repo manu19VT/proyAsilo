@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { EntryRequest, ID } from '../types';
-import { query, queryOne, execute } from '../database/database';
+import { query, queryOne, execute, getDatabase } from '../database/database';
 import { patientMedicationService } from './PatientMedicationService';
 
 interface EntryFilters {
@@ -35,33 +35,28 @@ export class EntryRequestService {
   }
 
   async listEntryRequests(filters?: EntryFilters): Promise<EntryRequest[]> {
+    // Primero obtener solo las entradas (sin items) - más eficiente
     let sql = `
       SELECT 
-        er.id,
-        er.folio,
-        er.tipo as type,
-        er.paciente_id as patientId,
-        er.fecha_creacion as createdAt,
-        er.estado as status,
-        er.fecha_vencimiento as dueDate,
-        ei.medicamento_id as medicationId,
-        ei.cantidad as qty,
-        ei.dosis_recomendada as dosisRecomendada,
-        ei.frecuencia as frecuencia,
-        ei.fecha_caducidad as fechaCaducidad
-      FROM entry_requests er
-      LEFT JOIN entry_items ei ON er.id = ei.solicitud_id
+        id,
+        folio,
+        tipo as type,
+        paciente_id as patientId,
+        fecha_creacion as createdAt,
+        estado as status,
+        fecha_vencimiento as dueDate
+      FROM entry_requests
     `;
     const params: Record<string, any> = {};
     const conditions: string[] = [];
 
     if (filters?.type) {
-      conditions.push('er.tipo = @type');
+      conditions.push('tipo = @type');
       params.type = filters.type;
     }
 
     if (filters?.patientId) {
-      conditions.push('er.paciente_id = @patientId');
+      conditions.push('paciente_id = @patientId');
       params.patientId = filters.patientId;
     }
 
@@ -69,50 +64,71 @@ export class EntryRequestService {
       sql += ` WHERE ${conditions.join(' AND ')}`;
     }
 
-    sql += ' ORDER BY er.fecha_creacion DESC, ei.medicamento_id';
+    sql += ' ORDER BY fecha_creacion DESC';
 
-    const rows = await query<any>(sql, params);
+    // Obtener solo las entradas primero
+    const entries = await query<any>(sql, params);
     
-    // Agrupar items por entrada
-    const entriesMap = new Map<string, {
-      id: string;
-      folio: string;
-      type: "entrada" | "salida";
-      patientId: string;
-      createdAt: string;
-      status: "completa" | "incompleta";
-      dueDate?: string;
-      items: { medicationId: ID; qty: number; dosisRecomendada?: string; frecuencia?: string; fechaCaducidad?: string }[];
-    }>();
+    if (entries.length === 0) {
+      return [];
+    }
 
-    for (const row of rows) {
-      if (!entriesMap.has(row.id)) {
-        entriesMap.set(row.id, {
-          id: row.id,
-          folio: row.folio,
-          type: row.type,
-          patientId: row.patientId,
-          createdAt: row.createdAt,
-          status: row.status,
-          dueDate: row.dueDate || undefined,
-          items: []
-        });
-      }
+    // Obtener todos los items de estas entradas en una sola consulta usando subconsulta
+    // Esto es más eficiente que múltiples consultas
+    const entryIds = entries.map(e => e.id);
+    
+    // Construir consulta segura usando parámetros de tabla de valores
+    // Para SQL Server, usamos una tabla de valores temporal
+    const pool = await getDatabase();
+    const request = pool.request();
+    
+    // Crear una tabla de valores usando XML o string splitting (más seguro que concatenación)
+    // Para IDs UUID, podemos usar una tabla de valores temporal
+    const idsTable = entryIds.map(id => `'${id.replace(/'/g, "''")}'`).join(',');
+    
+    // Si hay muchos IDs, dividir en lotes para evitar problemas
+    const BATCH_SIZE = 100;
+    const itemsMap = new Map<string, { medicationId: ID; qty: number; dosisRecomendada?: string; frecuencia?: string; fechaCaducidad?: string }[]>();
+    
+    for (let i = 0; i < entryIds.length; i += BATCH_SIZE) {
+      const batch = entryIds.slice(i, i + BATCH_SIZE);
+      const batchIds = batch.map(id => `'${id.replace(/'/g, "''")}'`).join(',');
+      
+      const itemsSql = `
+        SELECT 
+          solicitud_id as entryRequestId,
+          medicamento_id as medicationId,
+          cantidad as qty,
+          dosis_recomendada as dosisRecomendada,
+          frecuencia as frecuencia,
+          fecha_caducidad as fechaCaducidad
+        FROM entry_items
+        WHERE solicitud_id IN (${batchIds})
+        ORDER BY solicitud_id, medicamento_id
+      `;
 
-      const entry = entriesMap.get(row.id)!;
-      // Solo agregar item si existe (puede ser null por el LEFT JOIN)
-      if (row.medicationId) {
-        entry.items.push({
-          medicationId: row.medicationId,
-          qty: row.qty,
-          dosisRecomendada: row.dosisRecomendada || undefined,
-          frecuencia: row.frecuencia || undefined,
-          fechaCaducidad: row.fechaCaducidad || undefined
+      const itemsResult = await request.query(itemsSql);
+      const itemsRows = itemsResult.recordset;
+      
+      for (const item of itemsRows) {
+        if (!itemsMap.has(item.entryRequestId)) {
+          itemsMap.set(item.entryRequestId, []);
+        }
+        itemsMap.get(item.entryRequestId)!.push({
+          medicationId: item.medicationId,
+          qty: item.qty,
+          dosisRecomendada: item.dosisRecomendada || undefined,
+          frecuencia: item.frecuencia || undefined,
+          fechaCaducidad: item.fechaCaducidad || undefined
         });
       }
     }
 
-    return Array.from(entriesMap.values()).map(entry => this.mapRow(entry, entry.items));
+    // Combinar entradas con sus items
+    return entries.map(entry => {
+      const items = itemsMap.get(entry.id) || [];
+      return this.mapRow(entry, items);
+    });
   }
 
   async getEntryRequestById(id: ID): Promise<EntryRequest | null> {

@@ -6,7 +6,7 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api
 async function request<T>(
   endpoint: string,
   options?: RequestInit,
-  timeout: number = 30000 // 30 segundos por defecto
+  timeout: number = 60000 // 60 segundos por defecto (aumentado para producción)
 ): Promise<T> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
