@@ -102,6 +102,16 @@ export default function EntriesPage() {
     setFilteredEntries(entries.filter(entry => entry.folio.toLowerCase().includes(q)));
   }, [entries, searchFolio]);
 
+  // Validar fecha cuando cambian los items seleccionados
+  useEffect(() => {
+    if (entryType === "salida" && dueDate && selectedItems.length > 0) {
+      const error = validateDueDate(dueDate);
+      setDueDateError(error);
+    } else if (selectedItems.length === 0) {
+      setDueDateError(null);
+    }
+  }, [selectedItems, entryType, dueDate, validateDueDate]);
+
   const resetForm = () => {
     setEntryType("salida");
     setPatientId("");
@@ -182,7 +192,15 @@ export default function EntriesPage() {
       newItem.fechaCaducidad = med.expiresAt;
     }
 
-    setSelectedItems(prev => [...prev, newItem]);
+    setSelectedItems(prev => {
+      const updated = [...prev, newItem];
+      // Validar la fecha cuando se agrega un nuevo item
+      if (entryType === "salida" && dueDate) {
+        const error = validateDueDate(dueDate);
+        setDueDateError(error);
+      }
+      return updated;
+    });
     setSelectedMedId("");
     setItemQty("");
     setItemDosis("");
@@ -677,7 +695,7 @@ export default function EntriesPage() {
                             <td style={{ padding: 8 }}>
                               {item.fechaCaducidad ? new Date(item.fechaCaducidad).toLocaleDateString() : "-"}
                             </td>
-                          </>
+                          </> 
                         )}
                       </tr>
                     );
