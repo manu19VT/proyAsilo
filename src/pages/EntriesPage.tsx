@@ -102,29 +102,6 @@ export default function EntriesPage() {
     setFilteredEntries(entries.filter(entry => entry.folio.toLowerCase().includes(q)));
   }, [entries, searchFolio]);
 
-  // Validar fecha cuando cambian los items seleccionados
-  useEffect(() => {
-    if (entryType === "salida" && dueDate && selectedItems.length > 0) {
-      const error = validateDueDate(dueDate);
-      setDueDateError(error);
-    } else if (selectedItems.length === 0) {
-      setDueDateError(null);
-    }
-  }, [selectedItems, entryType, dueDate, validateDueDate]);
-
-  const resetForm = () => {
-    setEntryType("salida");
-    setPatientId("");
-    setDueDate("");
-    setSelectedItems([]);
-    setSelectedMedId("");
-    setItemQty("");
-    setItemDosis("");
-    setItemFrecuencia("");
-    setDueDateError(null);
-    setShowForm(false);
-  };
-
   const getMedById = useMemo(
     () => new Map(medications.map(m => [m.id, m] as const)),
     [medications]
@@ -153,6 +130,29 @@ export default function EntriesPage() {
 
     return null;
   }, [selectedItems]);
+
+  // Validar fecha cuando cambian los items seleccionados
+  useEffect(() => {
+    if (entryType === "salida" && dueDate && selectedItems.length > 0) {
+      const error = validateDueDate(dueDate);
+      setDueDateError(error);
+    } else if (selectedItems.length === 0) {
+      setDueDateError(null);
+    }
+  }, [selectedItems, entryType, dueDate, validateDueDate]);
+
+  const resetForm = () => {
+    setEntryType("salida");
+    setPatientId("");
+    setDueDate("");
+    setSelectedItems([]);
+    setSelectedMedId("");
+    setItemQty("");
+    setItemDosis("");
+    setItemFrecuencia("");
+    setDueDateError(null);
+    setShowForm(false);
+  };
 
   const handleAddItem = () => {
     if (!selectedMedId || !itemQty || Number(itemQty) <= 0) {
