@@ -42,12 +42,12 @@ export default function MedsPage() {
 
   const isExpired = useMemo(
     () => (date: string) => {
-      const expiryDate = new Date(date);
-      const today = new Date();
-      // Comparar solo fechas sin horas
-      expiryDate.setHours(0, 0, 0, 0);
-      today.setHours(0, 0, 0, 0);
-      return expiryDate < today;
+      const expiry = new Date(date);
+      const now = new Date();
+      // Resetear horas para comparar solo fechas
+      expiry.setHours(0, 0, 0, 0);
+      now.setHours(0, 0, 0, 0);
+      return expiry <= now;
     },
     []
   );

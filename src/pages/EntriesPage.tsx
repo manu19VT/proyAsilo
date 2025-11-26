@@ -130,8 +130,8 @@ export default function EntriesPage() {
     [medications]
   );
 
-  // Validar que la fecha para volver no sea mayor o igual a la fecha de caducidad de los medicamentos
-  const validateDueDate = useCallback((date: string): string | null => {
+  // Validar fecha contra fechas de caducidad de medicamentos
+  const validateDueDate = (date: string): string | null => {
     if (!date || selectedItems.length === 0) {
       return null;
     }
@@ -139,21 +139,20 @@ export default function EntriesPage() {
     const selectedDate = new Date(date);
     selectedDate.setHours(0, 0, 0, 0);
 
-    // Verificar cada medicamento agregado
+    // Verificar cada medicamento seleccionado
     for (const item of selectedItems) {
       if (item.fechaCaducidad) {
         const expiryDate = new Date(item.fechaCaducidad);
         expiryDate.setHours(0, 0, 0, 0);
         
         if (selectedDate >= expiryDate) {
-          const med = getMedById.get(item.medicationId);
-          return `Fecha de caducidad de medicamento, próxima a caducar. Selecciona otra fecha y/o revisa la caducidad del medicamento${med ? ` (${med.name})` : ""}`;
+          return "Fecha de caducidad de medicamento, proxima a caducar. Selecciona otra fecha y/o revisa la caducidad del medicamento.";
         }
       }
     }
 
     return null;
-  }, [selectedItems, getMedById]);
+  };
 
   const handleAddItem = () => {
     if (!selectedMedId || !itemQty || Number(itemQty) <= 0) {
@@ -206,18 +205,21 @@ export default function EntriesPage() {
     setItemQty("");
     setItemDosis("");
     setItemFrecuencia("");
+    
+    // Validar fecha si ya está seleccionada
+    if (dueDate) {
+      const error = validateDueDate(dueDate);
+      setDueDateError(error);
+    }
   };
 
   const handleRemoveItem = (id: string) => {
-    setSelectedItems(prev => {
-      const updated = prev.filter(i => i.medicationId !== id);
-      // Validar la fecha cuando se quita un item
-      if (entryType === "salida" && dueDate) {
-        const error = validateDueDate(dueDate);
-        setDueDateError(error);
-      }
-      return updated;
-    });
+    setSelectedItems(prev => prev.filter(i => i.medicationId !== id));
+    // Revalidar fecha después de eliminar un medicamento
+    if (dueDate) {
+      const error = validateDueDate(dueDate);
+      setDueDateError(error);
+    }
   };
 
   const handleCreateEntry = async () => {
@@ -226,11 +228,10 @@ export default function EntriesPage() {
       return;
     }
 
-    // Validar fecha para volver si es una salida
+    // Validar fecha antes de crear
     if (entryType === "salida" && dueDate) {
       const error = validateDueDate(dueDate);
       if (error) {
-        setDueDateError(error);
         alert(error);
         return;
       }
@@ -312,13 +313,9 @@ export default function EntriesPage() {
               size="small"
               value={entryType}
               onChange={(e) => {
-                const newType = e.target.value as "entrada" | "salida";
-                setEntryType(newType);
-                // Limpiar fecha y error si se cambia a entrada
-                if (newType === "entrada") {
-                  setDueDate("");
-                  setDueDateError(null);
-                }
+                setEntryType(e.target.value as "entrada" | "salida");
+                // Limpiar error de fecha al cambiar tipo
+                setDueDateError(null);
               }}
               fullWidth
             >
@@ -351,54 +348,41 @@ export default function EntriesPage() {
               ))}
             </TextField>
 
-            {entryType === "salida" && (() => {
-              // Calcular la fecha máxima permitida (un día antes de la fecha de caducidad más cercana)
-              const getMaxDate = (): string | undefined => {
-                if (selectedItems.length === 0) return undefined;
-                
-                let minExpiryDate: Date | null = null;
-                for (const item of selectedItems) {
-                  if (item.fechaCaducidad) {
-                    const expiryDate = new Date(item.fechaCaducidad);
-                    expiryDate.setHours(0, 0, 0, 0);
-                    if (!minExpiryDate || expiryDate < minExpiryDate) {
-                      minExpiryDate = expiryDate;
-                    }
-                  }
-                }
-                
-                if (minExpiryDate) {
-                  // Restar un día para que la fecha máxima sea un día antes de la caducidad
-                  minExpiryDate.setDate(minExpiryDate.getDate() - 1);
-                  return minExpiryDate.toISOString().split('T')[0];
-                }
-                return undefined;
-              };
-
-              const maxDate = getMaxDate();
-
-              return (
-                <TextField
-                  label="Fecha para volver (opcional)"
-                  type="date"
-                  size="small"
-                  value={dueDate}
-                  onChange={(e) => {
-                    const newDate = e.target.value;
-                    setDueDate(newDate);
-                    const error = validateDueDate(newDate);
-                    setDueDateError(error);
-                  }}
-                  InputLabelProps={{ shrink: true }}
-                  inputProps={{
-                    max: maxDate
-                  }}
-                  fullWidth
-                  error={!!dueDateError}
-                  helperText={dueDateError || "Próxima fecha estimada para entregar medicamentos (debe ser anterior a la fecha de caducidad)"}
-                />
-              );
-            })()}
+            {entryType === "salida" && (
+              <TextField
+                label="Fecha para volver (opcional)"
+                type="date"
+                size="small"
+                value={dueDate}
+                onChange={(e) => {
+                  const newDate = e.target.value;
+                  setDueDate(newDate);
+                  const error = validateDueDate(newDate);
+                  setDueDateError(error);
+                }}
+                InputLabelProps={{ shrink: true }}
+                fullWidth
+                error={!!dueDateError}
+                helperText={dueDateError || "Próxima fecha estimada para entregar medicamentos"}
+                inputProps={{
+                  max: selectedItems.length > 0 
+                    ? (() => {
+                        // Encontrar la fecha de caducidad más temprana
+                        const dates = selectedItems
+                          .map(item => item.fechaCaducidad)
+                          .filter((date): date is string => !!date)
+                          .map(date => new Date(date));
+                        if (dates.length > 0) {
+                          const minDate = new Date(Math.min(...dates.map(d => d.getTime())));
+                          minDate.setDate(minDate.getDate() - 1); // Un día antes de la caducidad
+                          return minDate.toISOString().split('T')[0];
+                        }
+                        return undefined;
+                      })()
+                    : undefined
+                }}
+              />
+            )}
 
             <Typography variant="subtitle2" color="primary" sx={{ mt: 2 }}>
               Medicamentos
@@ -711,7 +695,7 @@ export default function EntriesPage() {
                             <td style={{ padding: 8 }}>
                               {item.fechaCaducidad ? new Date(item.fechaCaducidad).toLocaleDateString() : "-"}
                             </td>
-                          </>
+                          </> 
                         )}
                       </tr>
                     );
