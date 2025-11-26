@@ -98,6 +98,8 @@ export default function PatientsPage() {
   const [patientToDelete, setPatientToDelete] = useState<Patient | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [detailDialog, setDetailDialog] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailPatient, setDetailPatient] = useState<Patient | null>(null);
   const [detailMedications, setDetailMedications] = useState<PatientMedication[]>([]);
@@ -210,6 +212,8 @@ export default function PatientsPage() {
   );
 
   const load = async () => {
+    setLoading(true);
+    setError(null);
     try {
       const data = await api.listPatients({
         status: statusFilter === "todos" ? undefined : statusFilter,
@@ -223,9 +227,12 @@ export default function PatientsPage() {
       }));
       setItems(normalized);
       setFilteredItems(filterPatients(normalized, searchQuery, searchType));
-    } catch (error) {
-      console.error(error);
-      alert("Error al cargar pacientes");
+    } catch (error: any) {
+      console.error("Error al cargar pacientes:", error);
+      const errorMessage = error?.message || "Error desconocido al cargar los pacientes";
+      setError(`Error al cargar los pacientes: ${errorMessage}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -810,11 +817,22 @@ export default function PatientsPage() {
         </Paper>
       )}
 
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
       <Typography variant="body2" color="text.secondary" mb={1}>
-        Mostrando {filteredItems.length} de {items.length} pacientes
+        {loading ? "Cargando..." : `Mostrando ${filteredItems.length} de ${items.length} pacientes`}
       </Typography>
 
-      <Table headers={["ID", "Nombre", "Edad", "CURP", "RFC", "Contactos", "Fecha Ingreso", "Estado", "Acciones"]}>
+      {loading && items.length === 0 ? (
+        <Alert severity="info" sx={{ mt: 2 }}>
+          Cargando pacientes, por favor espere...
+        </Alert>
+      ) : (
+        <Table headers={["ID", "Nombre", "Edad", "CURP", "RFC", "Contactos", "Fecha Ingreso", "Estado", "Acciones"]}>
         <AnimatePresence initial={false}>
           {filteredItems.map(patient => (
             <motion.tr
@@ -914,8 +932,9 @@ export default function PatientsPage() {
           ))}
         </AnimatePresence>
       </Table>
+      )}
 
-      {filteredItems.length === 0 && (
+      {!loading && filteredItems.length === 0 && (
         <Alert severity="info" sx={{ mt: 2 }}>
           No se encontraron pacientes.
         </Alert>
