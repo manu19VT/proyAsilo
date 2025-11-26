@@ -43,3 +43,4 @@ GO
 
 PRINT '✓ Todos los índices han sido creados o ya existían';
 
+
