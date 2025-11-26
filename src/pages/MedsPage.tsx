@@ -41,7 +41,14 @@ export default function MedsPage() {
 
 
   const isExpired = useMemo(
-    () => (date: string) => new Date(date) < new Date(),
+    () => (date: string) => {
+      const expiry = new Date(date);
+      const now = new Date();
+      // Resetear horas para comparar solo fechas
+      expiry.setHours(0, 0, 0, 0);
+      now.setHours(0, 0, 0, 0);
+      return expiry <= now;
+    },
     []
   );
 

@@ -61,6 +61,7 @@ export default function EntriesPage() {
   const [itemQty, setItemQty] = useState("");
   const [itemDosis, setItemDosis] = useState("");
   const [itemFrecuencia, setItemFrecuencia] = useState("");
+  const [dueDateError, setDueDateError] = useState<string | null>(null);
 
   const [printEntry, setPrintEntry] = useState<EntryRequest | null>(null);
 
@@ -110,6 +111,7 @@ export default function EntriesPage() {
     setItemQty("");
     setItemDosis("");
     setItemFrecuencia("");
+    setDueDateError(null);
     setShowForm(false);
   };
 
@@ -117,6 +119,30 @@ export default function EntriesPage() {
     () => new Map(medications.map(m => [m.id, m] as const)),
     [medications]
   );
+
+  // Validar fecha contra fechas de caducidad de medicamentos
+  const validateDueDate = (date: string): string | null => {
+    if (!date || selectedItems.length === 0) {
+      return null;
+    }
+
+    const selectedDate = new Date(date);
+    selectedDate.setHours(0, 0, 0, 0);
+
+    // Verificar cada medicamento seleccionado
+    for (const item of selectedItems) {
+      if (item.fechaCaducidad) {
+        const expiryDate = new Date(item.fechaCaducidad);
+        expiryDate.setHours(0, 0, 0, 0);
+        
+        if (selectedDate >= expiryDate) {
+          return "Fecha de caducidad de medicamento, proxima a caducar. Selecciona otra fecha y/o revisa la caducidad del medicamento.";
+        }
+      }
+    }
+
+    return null;
+  };
 
   const handleAddItem = () => {
     if (!selectedMedId || !itemQty || Number(itemQty) <= 0) {
@@ -161,16 +187,36 @@ export default function EntriesPage() {
     setItemQty("");
     setItemDosis("");
     setItemFrecuencia("");
+    
+    // Validar fecha si ya está seleccionada
+    if (dueDate) {
+      const error = validateDueDate(dueDate);
+      setDueDateError(error);
+    }
   };
 
   const handleRemoveItem = (id: string) => {
     setSelectedItems(prev => prev.filter(i => i.medicationId !== id));
+    // Revalidar fecha después de eliminar un medicamento
+    if (dueDate) {
+      const error = validateDueDate(dueDate);
+      setDueDateError(error);
+    }
   };
 
   const handleCreateEntry = async () => {
     if (!patientId || selectedItems.length === 0) {
       alert("Selecciona un paciente y al menos un medicamento");
       return;
+    }
+
+    // Validar fecha antes de crear
+    if (entryType === "salida" && dueDate) {
+      const error = validateDueDate(dueDate);
+      if (error) {
+        alert(error);
+        return;
+      }
     }
 
     try {
@@ -248,7 +294,11 @@ export default function EntriesPage() {
               select
               size="small"
               value={entryType}
-              onChange={(e) => setEntryType(e.target.value as "entrada" | "salida")}
+              onChange={(e) => {
+                setEntryType(e.target.value as "entrada" | "salida");
+                // Limpiar error de fecha al cambiar tipo
+                setDueDateError(null);
+              }}
               fullWidth
             >
               <MenuItem value="salida">
@@ -286,10 +336,33 @@ export default function EntriesPage() {
                 type="date"
                 size="small"
                 value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
+                onChange={(e) => {
+                  const newDate = e.target.value;
+                  setDueDate(newDate);
+                  const error = validateDueDate(newDate);
+                  setDueDateError(error);
+                }}
                 InputLabelProps={{ shrink: true }}
                 fullWidth
-                helperText="Próxima fecha estimada para entregar medicamentos"
+                error={!!dueDateError}
+                helperText={dueDateError || "Próxima fecha estimada para entregar medicamentos"}
+                inputProps={{
+                  max: selectedItems.length > 0 
+                    ? (() => {
+                        // Encontrar la fecha de caducidad más temprana
+                        const dates = selectedItems
+                          .map(item => item.fechaCaducidad)
+                          .filter((date): date is string => !!date)
+                          .map(date => new Date(date));
+                        if (dates.length > 0) {
+                          const minDate = new Date(Math.min(...dates.map(d => d.getTime())));
+                          minDate.setDate(minDate.getDate() - 1); // Un día antes de la caducidad
+                          return minDate.toISOString().split('T')[0];
+                        }
+                        return undefined;
+                      })()
+                    : undefined
+                }}
               />
             )}
 
