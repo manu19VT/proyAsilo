@@ -25,6 +25,8 @@ export default function MedsPage() {
   const { user } = useAuth();
   const [items, setItems] = useState<Medication[]>([]);
   const [filteredItems, setFilteredItems] = useState<Medication[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   // Roles que pueden agregar medicamentos: admin, doctor, nurse
   const canAddMedication = user?.role === 'admin' || user?.role === 'doctor' || user?.role === 'nurse';
@@ -65,13 +67,18 @@ export default function MedsPage() {
   };
 
   const load = async () => {
+    setLoading(true);
+    setError(null);
     try {
       const medications = await api.listMeds();
       setItems(medications);
       setFilteredItems(medications);
-    } catch (error) {
-      console.error(error);
-      alert("Error al cargar medicamentos");
+    } catch (error: any) {
+      console.error("Error al cargar medicamentos:", error);
+      const errorMessage = error?.message || "Error desconocido al cargar los medicamentos";
+      setError(`Error al cargar los medicamentos: ${errorMessage}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -261,11 +268,22 @@ export default function MedsPage() {
         </Paper>
       )}
 
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
       <Typography variant="body2" color="text.secondary" mb={1}>
-        Mostrando {filteredItems.length} de {items.length} medicamentos
+        {loading ? "Cargando..." : `Mostrando ${filteredItems.length} de ${items.length} medicamentos`}
       </Typography>
 
-      <Table headers={["Medicamento", "Cantidad", "Unidad", "Dosis", "Caducidad", "Estado"]}>
+      {loading && items.length === 0 ? (
+        <Alert severity="info" sx={{ mt: 2 }}>
+          Cargando medicamentos, por favor espere...
+        </Alert>
+      ) : (
+        <Table headers={["Medicamento", "Cantidad", "Unidad", "Dosis", "Caducidad", "Estado"]}>
         <AnimatePresence initial={false}>
           {filteredItems.map(med => (
             <motion.tr
@@ -287,8 +305,9 @@ export default function MedsPage() {
           ))}
         </AnimatePresence>
       </Table>
+      )}
 
-      {filteredItems.length === 0 && (
+      {!loading && filteredItems.length === 0 && (
         <Alert severity="info" sx={{ mt: 2 }}>
           No se encontraron medicamentos.
         </Alert>

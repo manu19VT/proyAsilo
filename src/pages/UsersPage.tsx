@@ -73,15 +73,22 @@ export default function UsersPage() {
   
   const [deleteDialog, setDeleteDialog] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
+    setLoading(true);
+    setError(null);
     try {
       const data = await api.listUsers(roleFilter === "todos" ? undefined : roleFilter);
       setUsers(data);
       setFilteredUsers(data);
-    } catch (error) {
-      console.error(error);
-      alert("Error al cargar usuarios");
+    } catch (error: any) {
+      console.error("Error al cargar usuarios:", error);
+      const errorMessage = error?.message || "Error desconocido al cargar los usuarios";
+      setError(`Error al cargar los usuarios: ${errorMessage}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -372,11 +379,22 @@ export default function UsersPage() {
         </Paper>
       )}
 
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
       <Typography variant="body2" color="text.secondary" mb={1}>
-        Mostrando {filteredUsers.length} de {users.length} usuarios
+        {loading ? "Cargando..." : `Mostrando ${filteredUsers.length} de ${users.length} usuarios`}
       </Typography>
 
-      <Table headers={["Nombre", "Correo", "Rol", "Edad", "Año nacimiento", "Fecha de creación", "Estado", "Acciones"]}>
+      {loading && users.length === 0 ? (
+        <Alert severity="info" sx={{ mt: 2 }}>
+          Cargando usuarios, por favor espere...
+        </Alert>
+      ) : (
+        <Table headers={["Nombre", "Correo", "Rol", "Edad", "Año nacimiento", "Fecha de creación", "Estado", "Acciones"]}>
         <AnimatePresence initial={false}>
           {filteredUsers.map(user => (
             <motion.tr
@@ -445,8 +463,9 @@ export default function UsersPage() {
           ))}
         </AnimatePresence>
       </Table>
+      )}
 
-      {filteredUsers.length === 0 && (
+      {!loading && filteredUsers.length === 0 && (
         <Alert severity="info" sx={{ mt: 2 }}>
           No se encontraron usuarios.
         </Alert>

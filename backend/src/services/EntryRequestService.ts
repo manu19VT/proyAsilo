@@ -82,16 +82,18 @@ export class EntryRequestService {
     const pool = await getDatabase();
     const request = pool.request();
     
-    // Crear una tabla de valores usando XML o string splitting (más seguro que concatenación)
-    // Para IDs UUID, podemos usar una tabla de valores temporal
-    const idsTable = entryIds.map(id => `'${id.replace(/'/g, "''")}'`).join(',');
-    
-    // Si hay muchos IDs, dividir en lotes para evitar problemas
+    // Si hay muchos IDs, dividir en lotes para evitar problemas de rendimiento
     const BATCH_SIZE = 100;
     const itemsMap = new Map<string, { medicationId: ID; qty: number; dosisRecomendada?: string; frecuencia?: string; fechaCaducidad?: string }[]>();
     
+    // Inicializar el mapa con arrays vacíos para todas las entradas
+    entryIds.forEach(id => {
+      itemsMap.set(id, []);
+    });
+    
     for (let i = 0; i < entryIds.length; i += BATCH_SIZE) {
       const batch = entryIds.slice(i, i + BATCH_SIZE);
+      // Escapar comillas simples para prevenir SQL injection
       const batchIds = batch.map(id => `'${id.replace(/'/g, "''")}'`).join(',');
       
       const itemsSql = `
@@ -107,20 +109,25 @@ export class EntryRequestService {
         ORDER BY solicitud_id, medicamento_id
       `;
 
-      const itemsResult = await request.query(itemsSql);
-      const itemsRows = itemsResult.recordset;
-      
-      for (const item of itemsRows) {
-        if (!itemsMap.has(item.entryRequestId)) {
-          itemsMap.set(item.entryRequestId, []);
+      try {
+        const itemsResult = await request.query(itemsSql);
+        const itemsRows = itemsResult.recordset;
+        
+        for (const item of itemsRows) {
+          const entryId = item.entryRequestId;
+          if (itemsMap.has(entryId)) {
+            itemsMap.get(entryId)!.push({
+              medicationId: item.medicationId,
+              qty: item.qty,
+              dosisRecomendada: item.dosisRecomendada || undefined,
+              frecuencia: item.frecuencia || undefined,
+              fechaCaducidad: item.fechaCaducidad || undefined
+            });
+          }
         }
-        itemsMap.get(item.entryRequestId)!.push({
-          medicationId: item.medicationId,
-          qty: item.qty,
-          dosisRecomendada: item.dosisRecomendada || undefined,
-          frecuencia: item.frecuencia || undefined,
-          fechaCaducidad: item.fechaCaducidad || undefined
-        });
+      } catch (error: any) {
+        console.error(`Error obteniendo items para lote ${i}-${i + BATCH_SIZE}:`, error);
+        // Continuar con el siguiente lote en caso de error
       }
     }
 
