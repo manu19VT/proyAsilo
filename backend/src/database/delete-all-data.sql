@@ -46,3 +46,8 @@ PRINT 'Todos los datos han sido eliminados. Las tablas están vacías y listas p
 PRINT 'NOTA: El usuario admin se creará automáticamente cuando ejecutes el schema.sql o cuando inicies la aplicación.';
 GO
 
+select * from dbo.users
+
+
+
+

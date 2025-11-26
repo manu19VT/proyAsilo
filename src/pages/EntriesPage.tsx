@@ -46,6 +46,8 @@ export default function EntriesPage() {
   const [filteredEntries, setFilteredEntries] = useState<EntryRequest[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [medications, setMedications] = useState<Medication[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("todos");
   const [searchFolio, setSearchFolio] = useState("");
@@ -63,6 +65,8 @@ export default function EntriesPage() {
   const [printEntry, setPrintEntry] = useState<EntryRequest | null>(null);
 
   const load = async () => {
+    setLoading(true);
+    setError(null);
     try {
       const [entryData, patientsData, medsData] = await Promise.all([
         api.listEntries({ type: typeFilter === "todos" ? undefined : typeFilter }),
@@ -73,9 +77,13 @@ export default function EntriesPage() {
       setFilteredEntries(entryData);
       setPatients(patientsData);
       setMedications(medsData);
-    } catch (error) {
-      console.error(error);
-      alert("Error al cargar registros");
+    } catch (error: any) {
+      console.error("Error al cargar registros:", error);
+      const errorMessage = error?.message || "Error desconocido al cargar los registros";
+      setError(`Error al cargar los registros: ${errorMessage}`);
+      // Mantener datos anteriores si hay error
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -430,11 +438,22 @@ export default function EntriesPage() {
         </Paper>
       )}
 
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
       <Typography variant="body2" color="text.secondary" mb={1}>
-        Mostrando {filteredEntries.length} de {entries.length} registros
+        {loading ? "Cargando..." : `Mostrando ${filteredEntries.length} de ${entries.length} registros`}
       </Typography>
 
-      <Table headers={["Folio", "Tipo", "Paciente", "Items", "Total", "Fecha", "Estado", "Acciones"]}>
+      {loading && entries.length === 0 ? (
+        <Alert severity="info" sx={{ mt: 2 }}>
+          Cargando registros, por favor espere...
+        </Alert>
+      ) : (
+        <Table headers={["Folio", "Tipo", "Paciente", "Items", "Total", "Fecha", "Estado", "Acciones"]}>
         <AnimatePresence initial={false}>
           {filteredEntries.map(entry => (
             <motion.tr
@@ -498,8 +517,9 @@ export default function EntriesPage() {
           ))}
         </AnimatePresence>
       </Table>
+      )}
 
-      {filteredEntries.length === 0 && (
+      {!loading && filteredEntries.length === 0 && (
         <Alert severity="info" sx={{ mt: 2 }}>
           No se encontraron registros.
         </Alert>
