@@ -102,6 +102,35 @@ export default function EntriesPage() {
     setFilteredEntries(entries.filter(entry => entry.folio.toLowerCase().includes(q)));
   }, [entries, searchFolio]);
 
+  const getMedById = useMemo(
+    () => new Map(medications.map(m => [m.id, m] as const)),
+    [medications]
+  );
+
+  // Validar fecha contra fechas de caducidad de medicamentos
+  const validateDueDate = useCallback((date: string): string | null => {
+    if (!date || selectedItems.length === 0) {
+      return null;
+    }
+
+    const selectedDate = new Date(date);
+    selectedDate.setHours(0, 0, 0, 0);
+
+    // Verificar cada medicamento seleccionado
+    for (const item of selectedItems) {
+      if (item.fechaCaducidad) {
+        const expiryDate = new Date(item.fechaCaducidad);
+        expiryDate.setHours(0, 0, 0, 0);
+        
+        if (selectedDate >= expiryDate) {
+          return "Fecha de caducidad de medicamento, proxima a caducar. Selecciona otra fecha y/o revisa la caducidad del medicamento.";
+        }
+      }
+    }
+
+    return null;
+  }, [selectedItems]);
+
   // Validar fecha cuando cambian los items seleccionados
   useEffect(() => {
     if (entryType === "salida" && dueDate && selectedItems.length > 0) {
@@ -123,35 +152,6 @@ export default function EntriesPage() {
     setItemFrecuencia("");
     setDueDateError(null);
     setShowForm(false);
-  };
-
-  const getMedById = useMemo(
-    () => new Map(medications.map(m => [m.id, m] as const)),
-    [medications]
-  );
-
-  // Validar fecha contra fechas de caducidad de medicamentos
-  const validateDueDate = (date: string): string | null => {
-    if (!date || selectedItems.length === 0) {
-      return null;
-    }
-
-    const selectedDate = new Date(date);
-    selectedDate.setHours(0, 0, 0, 0);
-
-    // Verificar cada medicamento seleccionado
-    for (const item of selectedItems) {
-      if (item.fechaCaducidad) {
-        const expiryDate = new Date(item.fechaCaducidad);
-        expiryDate.setHours(0, 0, 0, 0);
-        
-        if (selectedDate >= expiryDate) {
-          return "Fecha de caducidad de medicamento, proxima a caducar. Selecciona otra fecha y/o revisa la caducidad del medicamento.";
-        }
-      }
-    }
-
-    return null;
   };
 
   const handleAddItem = () => {
