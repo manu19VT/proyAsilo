@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import {
   TextField,
   Button,
@@ -121,7 +121,7 @@ export default function EntriesPage() {
   );
 
   // Validar fecha contra fechas de caducidad de medicamentos
-  const validateDueDate = (date: string): string | null => {
+  const validateDueDate = useCallback((date: string): string | null => {
     if (!date || selectedItems.length === 0) {
       return null;
     }
@@ -142,7 +142,7 @@ export default function EntriesPage() {
     }
 
     return null;
-  };
+  }, [selectedItems]);
 
   const handleAddItem = () => {
     if (!selectedMedId || !itemQty || Number(itemQty) <= 0) {
