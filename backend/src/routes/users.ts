@@ -1,5 +1,7 @@
 import express from 'express';
 import { userService } from '../services/UserService';
+import { mockService } from '../services/MockService';
+import { isMockMode } from '../utils/mockMode';
 
 const router = express.Router();
 
@@ -7,6 +9,12 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   try {
     const { role } = req.query as { role?: string };
+    
+    if (isMockMode()) {
+      const users = mockService.listUsers(role);
+      return res.json(users);
+    }
+    
     const users = await userService.listUsers(role);
     res.json(users);
   } catch (error: any) {
@@ -17,6 +25,14 @@ router.get('/', async (req, res) => {
 // Obtener usuario por ID
 router.get('/:id', async (req, res) => {
   try {
+    if (isMockMode()) {
+      const user = mockService.getUserById(req.params.id);
+      if (!user) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
+      return res.json(user);
+    }
+    
     const user = await userService.getUserById(req.params.id);
     if (!user) {
       return res.status(404).json({ error: 'Usuario no encontrado' });
