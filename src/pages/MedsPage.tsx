@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   TextField,
   Button,
@@ -7,12 +7,14 @@ import {
   Paper,
   Chip,
   Alert,
-  MenuItem
+  MenuItem,
+  Box
 } from "@mui/material";
 import {
   Add as AddIcon,
   Search as SearchIcon,
-  Warning as WarningIcon
+  Warning as WarningIcon,
+  QrCodeScanner as QrCodeScannerIcon
 } from "@mui/icons-material";
 import { AnimatePresence, motion } from "framer-motion";
 import Page from "../components/Page";
@@ -23,17 +25,21 @@ import { useAuth } from "../contexts/AuthContext";
 
 export default function MedsPage() {
   const { user } = useAuth();
+
   const [items, setItems] = useState<Medication[]>([]);
   const [filteredItems, setFilteredItems] = useState<Medication[]>([]);
-
   const [searchQuery, setSearchQuery] = useState("");
+
   const [showForm, setShowForm] = useState(false);
+  const [barcode, setBarcode] = useState("");
   const [name, setName] = useState("");
   const [qty, setQty] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [unit, setUnit] = useState("tabletas");
   const [dosage, setDosage] = useState("");
 
+  const [scanMode, setScanMode] = useState(false);
+  const scanInputRef = useRef<HTMLInputElement>(null);
 
   const isExpired = useMemo(
     () => (date: string) => new Date(date) < new Date(),
@@ -87,18 +93,21 @@ export default function MedsPage() {
       items.filter(m =>
         m.name.toLowerCase().includes(q) ||
         m.unit?.toLowerCase().includes(q) ||
-        m.dosage?.toLowerCase().includes(q)
+        m.dosage?.toLowerCase().includes(q) ||
+        m.barcode?.toLowerCase().includes(q)
       )
     );
   }, [items, searchQuery]);
 
   const resetForm = () => {
+    setBarcode("");
     setName("");
     setQty("");
     setExpiresAt("");
-    setUnit("ampolletas");
+    setUnit("tabletas");
     setDosage("");
     setShowForm(false);
+    setScanMode(false);
   };
 
   const handleAddMedication = async () => {
@@ -117,8 +126,9 @@ export default function MedsPage() {
         expiresAt,
         unit: unit.trim() || undefined,
         dosage: dosage.trim() || undefined,
+        barcode: barcode.trim() || undefined,
         userId: user?.id
-      });
+      } as any);
       resetForm();
       load();
     } catch (error) {
@@ -127,9 +137,22 @@ export default function MedsPage() {
     }
   };
 
-
   const expiredCount = items.filter(m => isExpired(m.expiresAt)).length;
   const expiringSoonCount = items.filter(m => !isExpired(m.expiresAt) && isExpiringSoon(m.expiresAt)).length;
+
+  // --- escáner ---
+  const startScan = () => {
+    setScanMode(true);
+    setBarcode("");
+    setTimeout(() => scanInputRef.current?.focus(), 0);
+  };
+
+  const handleScanKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      setScanMode(false);
+      (document.getElementById("med-name-input") as HTMLInputElement | null)?.focus();
+    }
+  };
 
   return (
     <Page>
@@ -163,7 +186,7 @@ export default function MedsPage() {
       <Paper sx={{ p: 2, mb: 2 }}>
         <Typography variant="subtitle2" gutterBottom>Buscar medicamento</Typography>
         <TextField
-          placeholder="Buscar por nombre, unidad o dosis..."
+          placeholder="Buscar por nombre, unidad, dosis o código de barras..."
           size="small"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -175,10 +198,58 @@ export default function MedsPage() {
       </Paper>
 
       {showForm && (
-        <Paper sx={{ p: 2, mb: 2 }}>
+        <Paper sx={{ p: 2, mb: 2, bgcolor: "#f7f0dc" }}>
           <Typography variant="h6" gutterBottom>Nuevo Medicamento</Typography>
+
           <Stack spacing={2}>
+            {/* === Código de barras + botón a la derecha en el mismo renglón === */}
+            <Stack
+              direction={{ xs: "column", sm: "row" }}
+              spacing={1.5}
+              alignItems={{ xs: "stretch", sm: "center" }}
+            >
+              <TextField
+                label="Código de barras"
+                size="small"
+                value={barcode}
+                onChange={(e) => setBarcode(e.target.value)}
+                fullWidth
+                placeholder="Escanéalo o escríbelo manualmente"
+              />
+              <Button
+                variant="outlined"
+                color="warning"
+                startIcon={<QrCodeScannerIcon />}
+                onClick={startScan}
+                sx={{ whiteSpace: "nowrap" }}
+              >
+                Escanear con lector
+              </Button>
+            </Stack>
+
+            {/* input oculto para el lector */}
+            <input
+              ref={scanInputRef}
+              value={barcode}
+              onChange={(e) => setBarcode(e.target.value)}
+              onKeyDown={handleScanKeyDown}
+              aria-hidden
+              style={{
+                position: "absolute",
+                opacity: 0,
+                height: 0,
+                width: 0,
+                pointerEvents: "none"
+              }}
+            />
+            <Typography variant="caption" color="text.secondary">
+              {scanMode
+                ? "Modo escaneo activo: apunta el lector al código y presiona Enter al finalizar."
+                : "Tip: pulsa “Escanear con lector” para capturar con un lector USB/Bluetooth."}
+            </Typography>
+
             <TextField
+              id="med-name-input"
               label="Nombre del medicamento *"
               size="small"
               value={name}
@@ -206,6 +277,7 @@ export default function MedsPage() {
                 onChange={(e) => setUnit(e.target.value)}
                 fullWidth
               >
+                <MenuItem value="tabletas">Tabletas</MenuItem>
                 <MenuItem value="ampolletas">Ampolletas</MenuItem>
                 <MenuItem value="sobres">Sobres</MenuItem>
                 <MenuItem value="frascos">Frascos</MenuItem>
@@ -254,7 +326,7 @@ export default function MedsPage() {
         Mostrando {filteredItems.length} de {items.length} medicamentos
       </Typography>
 
-      <Table headers={["Medicamento", "Cantidad", "Unidad", "Dosis", "Caducidad", "Estado"]}>
+      <Table headers={["Medicamento", "Cantidad", "Unidad", "Dosis", "Caducidad", "Estado", "Código"]}>
         <AnimatePresence initial={false}>
           {filteredItems.map(med => (
             <motion.tr
@@ -272,6 +344,9 @@ export default function MedsPage() {
                 {new Date(med.expiresAt).toLocaleDateString()}
               </td>
               <td style={{ padding: 8 }}>{getExpiryChip(med.expiresAt)}</td>
+              <td style={{ padding: 8, fontFamily: "monospace", fontSize: 12 }}>
+                {med.barcode || "-"}
+              </td>
             </motion.tr>
           ))}
         </AnimatePresence>
