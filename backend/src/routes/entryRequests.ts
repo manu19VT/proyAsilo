@@ -1,5 +1,7 @@
 import express from 'express';
 import { entryRequestService } from '../services/EntryRequestService';
+import { mockService } from '../services/MockService';
+import { isMockMode } from '../utils/mockMode';
 
 const router = express.Router();
 
@@ -7,6 +9,15 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   try {
     const { type, patientId } = req.query as { type?: string; patientId?: string };
+    
+    if (isMockMode()) {
+      const entryRequests = mockService.listEntryRequests({
+        type: type === 'entrada' || type === 'salida' ? type : undefined,
+        patientId: patientId || undefined
+      });
+      return res.json(entryRequests);
+    }
+    
     const entryRequests = await entryRequestService.listEntryRequests({
       type: type === 'entrada' || type === 'salida' ? type : undefined,
       patientId: patientId || undefined
@@ -19,6 +30,14 @@ router.get('/', async (req, res) => {
 
 router.get('/folio/:folio', async (req, res) => {
   try {
+    if (isMockMode()) {
+      const entryRequest = mockService.getEntryRequestByFolio(req.params.folio);
+      if (!entryRequest) {
+        return res.status(404).json({ error: 'Solicitud no encontrada' });
+      }
+      return res.json(entryRequest);
+    }
+    
     const entryRequest = await entryRequestService.getEntryRequestByFolio(req.params.folio);
     if (!entryRequest) {
       return res.status(404).json({ error: 'Solicitud no encontrada' });
@@ -32,6 +51,14 @@ router.get('/folio/:folio', async (req, res) => {
 // Obtener solicitud por ID
 router.get('/:id', async (req, res) => {
   try {
+    if (isMockMode()) {
+      const entryRequest = mockService.getEntryRequestById(req.params.id);
+      if (!entryRequest) {
+        return res.status(404).json({ error: 'Solicitud no encontrada' });
+      }
+      return res.json(entryRequest);
+    }
+    
     const entryRequest = await entryRequestService.getEntryRequestById(req.params.id);
     if (!entryRequest) {
       return res.status(404).json({ error: 'Solicitud no encontrada' });
@@ -56,6 +83,17 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Debe incluir al menos un item' });
     }
 
+    if (isMockMode()) {
+      const entryRequest = mockService.addEntryRequest({
+        type,
+        patientId,
+        items,
+        status: status || 'completa',
+        dueDate,
+      });
+      return res.status(201).json(entryRequest);
+    }
+
     const entryRequest = await entryRequestService.createEntryRequest({
       type,
       patientId,
@@ -73,6 +111,14 @@ router.post('/', async (req, res) => {
 // Actualizar solicitud
 router.put('/:id', async (req, res) => {
   try {
+    if (isMockMode()) {
+      const entryRequest = mockService.updateEntryRequest(req.params.id, req.body);
+      if (!entryRequest) {
+        return res.status(404).json({ error: 'Solicitud no encontrada' });
+      }
+      return res.json(entryRequest);
+    }
+    
     const entryRequest = await entryRequestService.updateEntryRequest(req.params.id, req.body);
     if (!entryRequest) {
       return res.status(404).json({ error: 'Solicitud no encontrada' });
@@ -86,6 +132,14 @@ router.put('/:id', async (req, res) => {
 // Eliminar solicitud
 router.delete('/:id', async (req, res) => {
   try {
+    if (isMockMode()) {
+      const deleted = mockService.deleteEntryRequest(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: 'Solicitud no encontrada' });
+      }
+      return res.json({ message: 'Solicitud eliminada correctamente' });
+    }
+    
     const deleted = await entryRequestService.deleteEntryRequest(req.params.id);
     if (!deleted) {
       return res.status(404).json({ error: 'Solicitud no encontrada' });
