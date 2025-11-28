@@ -1,6 +1,8 @@
 import express from 'express';
 import crypto from 'crypto';
 import { userService } from '../services/UserService';
+import { mockService } from '../services/MockService';
+import { isMockMode } from '../utils/mockMode';
 
 const router = express.Router();
 
@@ -22,6 +24,16 @@ router.post('/login', async (req, res) => {
     if (!email || !password) {
       return res.status(400).json({ error: 'email y password son requeridos' });
     }
+    
+    // Usar mock si está activado
+    if (isMockMode()) {
+      const passwordHash = hashPassword(password, email);
+      const user = mockService.verifyPassword(email, passwordHash);
+      if (!user) return res.status(401).json({ error: 'Credenciales inválidas' });
+      return res.json({ user });
+    }
+    
+    // Modo normal con base de datos
     const passwordHash = hashPassword(password, email);
     const user = await userService.verifyPassword(email, passwordHash);
     if (!user) return res.status(401).json({ error: 'Credenciales inválidas' });

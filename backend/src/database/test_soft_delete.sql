@@ -56,7 +56,7 @@ PRINT '';
 PRINT 'PASO 3: Ejecutando DELETE (se hará soft delete automáticamente)...';
 BEGIN TRY
     DELETE FROM patients WHERE id = @pacienteId;
-    PRINT '✓ DELETE ejecutado. El trigger debería haber hecho soft delete.';
+    PRINT ' DELETE ejecutado. El trigger debería haber hecho soft delete.';
 END TRY
 BEGIN CATCH
     PRINT 'ERROR: ' + ERROR_MESSAGE();
@@ -80,11 +80,11 @@ WHERE id = @pacienteId;
 
 IF EXISTS (SELECT 1 FROM patients WHERE id = @pacienteId AND eliminado = 1)
 BEGIN
-    PRINT '✓ Soft delete exitoso: eliminado = 1';
+    PRINT ' Soft delete exitoso: eliminado = 1';
 END
 ELSE
 BEGIN
-    PRINT '✗ ERROR: El paciente no está marcado como eliminado.';
+    PRINT ' ERROR: El paciente no está marcado como eliminado.';
 END
 PRINT '';
 
@@ -98,11 +98,11 @@ IF NOT EXISTS (
       AND (eliminado = 0 OR eliminado IS NULL)
 )
 BEGIN
-    PRINT '✓ El paciente está correctamente oculto.';
+    PRINT ' El paciente está correctamente oculto.';
 END
 ELSE
 BEGIN
-    PRINT '✗ ERROR: El paciente aún aparece en consultas normales.';
+    PRINT ' ERROR: El paciente aún aparece en consultas normales.';
 END
 PRINT '';
 
@@ -128,11 +128,11 @@ IF EXISTS (
       AND accion = 'SOFT_DELETE'
 )
 BEGIN
-    PRINT '✓ Registro en audit_log creado correctamente.';
+    PRINT ' Registro en audit_log creado correctamente.';
 END
 ELSE
 BEGIN
-    PRINT '✗ ADVERTENCIA: No se encontró registro en audit_log.';
+    PRINT ' ADVERTENCIA: No se encontró registro en audit_log.';
 END
 PRINT '';
 
@@ -144,7 +144,7 @@ BEGIN TRY
     EXEC SP_RestaurarPaciente 
         @pacienteId = @pacienteId,
         @restauradoPor = NULL;
-    PRINT '✓ Paciente restaurado.';
+    PRINT ' Paciente restaurado.';
 END TRY
 BEGIN CATCH
     PRINT 'ERROR: ' + ERROR_MESSAGE();
@@ -171,11 +171,11 @@ IF EXISTS (
       AND (eliminado = 0 OR eliminado IS NULL)
 )
 BEGIN
-    PRINT '✓ Paciente restaurado correctamente.';
+    PRINT ' Paciente restaurado correctamente.';
 END
 ELSE
 BEGIN
-    PRINT '✗ ERROR: El paciente no se restauró correctamente.';
+    PRINT ' ERROR: El paciente no se restauró correctamente.';
 END
 PRINT '';
 
@@ -199,11 +199,11 @@ IF EXISTS (
       AND accion = 'RESTORE'
 )
 BEGIN
-    PRINT '✓ Registro de restauración en audit_log creado.';
+    PRINT ' Registro de restauración en audit_log creado.';
 END
 ELSE
 BEGIN
-    PRINT '✗ ADVERTENCIA: No se encontró registro de restauración.';
+    PRINT ' ADVERTENCIA: No se encontró registro de restauración.';
 END
 PRINT '';
 

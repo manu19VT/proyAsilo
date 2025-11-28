@@ -67,17 +67,28 @@ export default function UsersPage() {
 
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [changePasswordDialog, setChangePasswordDialog] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  
+  const [deleteDialog, setDeleteDialog] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
+    setLoading(true);
+    setError(null);
     try {
       const data = await api.listUsers(roleFilter === "todos" ? undefined : roleFilter);
       setUsers(data);
       setFilteredUsers(data);
-    } catch (error) {
-      console.error(error);
-      alert("Error al cargar usuarios");
+    } catch (error: any) {
+      console.error("Error al cargar usuarios:", error);
+      const errorMessage = error?.message || "Error desconocido al cargar los usuarios";
+      setError(`Error al cargar los usuarios: ${errorMessage}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -135,13 +146,26 @@ export default function UsersPage() {
 
   const handleDeleteUser = async (user: User) => {
     if (!isAdmin) return;
-    if (!window.confirm(`¿Eliminar la cuenta de ${user.name}?`)) return;
+    setSelectedUser(user);
+    setDeletePassword("");
+    setDeleteDialog(true);
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!selectedUser || !deletePassword.trim()) {
+      alert("Por favor ingresa la contraseña del usuario para confirmar la eliminación");
+      return;
+    }
     try {
-      await api.deleteUser(user.id);
+      await api.deleteUser(selectedUser.id, deletePassword);
+      alert("Usuario eliminado correctamente");
+      setDeleteDialog(false);
+      setDeletePassword("");
+      setSelectedUser(null);
       load();
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert("Error al eliminar usuario");
+      alert(error?.message || "Error al eliminar usuario. Verifica que la contraseña sea correcta.");
     }
   };
 
@@ -164,28 +188,41 @@ export default function UsersPage() {
 
   const openChangePassword = (user: User) => {
     setSelectedUser(user);
+    setCurrentPassword("");
     setNewPassword("");
     setConfirmPassword("");
     setChangePasswordDialog(true);
   };
 
   const handleChangePassword = async () => {
-    if (!selectedUser || !newPassword.trim() || newPassword !== confirmPassword) {
-      alert("Las contraseñas no coinciden");
+    if (!selectedUser || !currentPassword.trim()) {
+      alert("Por favor ingresa la contraseña actual");
+      return;
+    }
+    if (!newPassword.trim() || newPassword !== confirmPassword) {
+      alert("Las contraseñas nuevas no coinciden");
       return;
     }
     if (newPassword.length < 8) {
       alert("La contraseña debe tener al menos 8 caracteres");
       return;
     }
+    if (currentPassword === newPassword) {
+      alert("La nueva contraseña debe ser diferente a la actual");
+      return;
+    }
     try {
-      await api.changePassword(selectedUser.id, newPassword, false);
+      await api.changePassword(selectedUser.id, currentPassword, newPassword, false);
       alert("Contraseña actualizada correctamente");
       setChangePasswordDialog(false);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setSelectedUser(null);
       load();
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert("Error al cambiar contraseña");
+      alert(error?.message || "Error al cambiar contraseña. Verifica que la contraseña actual sea correcta.");
     }
   };
 
@@ -342,11 +379,22 @@ export default function UsersPage() {
         </Paper>
       )}
 
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
       <Typography variant="body2" color="text.secondary" mb={1}>
-        Mostrando {filteredUsers.length} de {users.length} usuarios
+        {loading ? "Cargando..." : `Mostrando ${filteredUsers.length} de ${users.length} usuarios`}
       </Typography>
 
-      <Table headers={["Nombre", "Correo", "Rol", "Edad", "Año nacimiento", "Fecha de creación", "Estado", "Acciones"]}>
+      {loading && users.length === 0 ? (
+        <Alert severity="info" sx={{ mt: 2 }}>
+          Cargando usuarios, por favor espere...
+        </Alert>
+      ) : (
+        <Table headers={["Nombre", "Correo", "Rol", "Edad", "Año nacimiento", "Fecha de creación", "Estado", "Acciones"]}>
         <AnimatePresence initial={false}>
           {filteredUsers.map(user => (
             <motion.tr
@@ -415,8 +463,9 @@ export default function UsersPage() {
           ))}
         </AnimatePresence>
       </Table>
+      )}
 
-      {filteredUsers.length === 0 && (
+      {!loading && filteredUsers.length === 0 && (
         <Alert severity="info" sx={{ mt: 2 }}>
           No se encontraron usuarios.
         </Alert>
@@ -424,7 +473,12 @@ export default function UsersPage() {
 
       <Dialog
         open={changePasswordDialog}
-        onClose={() => setChangePasswordDialog(false)}
+        onClose={() => {
+          setChangePasswordDialog(false);
+          setCurrentPassword("");
+          setNewPassword("");
+          setConfirmPassword("");
+        }}
         maxWidth="xs"
         fullWidth
       >
@@ -435,16 +489,31 @@ export default function UsersPage() {
               Usuario: <strong>{selectedUser?.name}</strong>
             </Alert>
             <TextField
+              label="Contraseña actual *"
+              type="password"
+              size="small"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              fullWidth
+              autoFocus
+              helperText="Ingresa la contraseña actual para confirmar"
+            />
+            <TextField
               label="Nueva contraseña *"
               type="password"
               size="small"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               fullWidth
-              helperText="Mínimo 8 caracteres"
+              error={newPassword.length > 0 && newPassword.length < 8}
+              helperText={
+                newPassword.length > 0 && newPassword.length < 8
+                  ? "La contraseña debe tener al menos 8 caracteres"
+                  : "Mínimo 8 caracteres"
+              }
             />
             <TextField
-              label="Confirmar contraseña *"
+              label="Confirmar nueva contraseña *"
               type="password"
               size="small"
               value={confirmPassword}
@@ -454,23 +523,85 @@ export default function UsersPage() {
               helperText={
                 confirmPassword.length > 0 && newPassword !== confirmPassword
                   ? "Las contraseñas no coinciden"
+                  : confirmPassword.length > 0 && newPassword === confirmPassword && newPassword.length >= 8
+                  ? "✓ Las contraseñas coinciden"
                   : ""
               }
             />
+            {currentPassword && newPassword && currentPassword === newPassword && (
+              <Alert severity="warning">
+                La nueva contraseña debe ser diferente a la contraseña actual
+              </Alert>
+            )}
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setChangePasswordDialog(false)}>Cancelar</Button>
+          <Button onClick={() => {
+            setChangePasswordDialog(false);
+            setCurrentPassword("");
+            setNewPassword("");
+            setConfirmPassword("");
+          }}>Cancelar</Button>
           <Button
             variant="contained"
             onClick={handleChangePassword}
             disabled={
+              !currentPassword.trim() ||
               !newPassword.trim() ||
               newPassword !== confirmPassword ||
-              newPassword.length < 8
+              newPassword.length < 8 ||
+              currentPassword.trim() === newPassword.trim()
             }
           >
             Cambiar Contraseña
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={deleteDialog}
+        onClose={() => {
+          setDeleteDialog(false);
+          setDeletePassword("");
+          setSelectedUser(null);
+        }}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Eliminar usuario</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Alert severity="warning">
+              Esta acción no se puede deshacer. Se eliminará permanentemente la cuenta de <strong>{selectedUser?.name}</strong>.
+            </Alert>
+            <Alert severity="info">
+              Se necesita un administrador para esto
+            </Alert>
+            <TextField
+              label="Contraseña de administrador *"
+              type="password"
+              size="small"
+              value={deletePassword}
+              onChange={(e) => setDeletePassword(e.target.value)}
+              fullWidth
+              helperText="Ingresa la contraseña de administrador para confirmar la eliminación"
+              autoFocus
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => {
+            setDeleteDialog(false);
+            setDeletePassword("");
+            setSelectedUser(null);
+          }}>Cancelar</Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={confirmDeleteUser}
+            disabled={!deletePassword.trim()}
+          >
+            Eliminar Usuario
           </Button>
         </DialogActions>
       </Dialog>

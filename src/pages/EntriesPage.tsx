@@ -58,6 +58,8 @@ export default function EntriesPage() {
   const [filteredEntries, setFilteredEntries] = useState<EntryRequest[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [medications, setMedications] = useState<Medication[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("todos");
   const [searchFolio, setSearchFolio] = useState("");
@@ -73,6 +75,7 @@ export default function EntriesPage() {
   const [itemQty, setItemQty] = useState("");
   const [itemDosis, setItemDosis] = useState("");
   const [itemFrecuencia, setItemFrecuencia] = useState("");
+  const [dueDateError, setDueDateError] = useState<string | null>(null);
 
   // Subform ENTRADA (nuevo med)
   const [nmBarcode, setNmBarcode] = useState("");
@@ -89,6 +92,8 @@ export default function EntriesPage() {
 
   // cargar datos
   const load = async () => {
+    setLoading(true);
+    setError(null);
     try {
       const [entryData, patientsData, medsData] = await Promise.all([
         api.listEntries({ type: typeFilter === "todos" ? undefined : (typeFilter as any) }),
@@ -99,9 +104,13 @@ export default function EntriesPage() {
       setFilteredEntries(entryData);
       setPatients(patientsData);
       setMedications(medsData);
-    } catch (error) {
-      console.error(error);
-      alert("Error al cargar registros");
+    } catch (error: any) {
+      console.error("Error al cargar registros:", error);
+      const errorMessage = error?.message || "Error desconocido al cargar los registros";
+      setError(`Error al cargar los registros: ${errorMessage}`);
+      // Mantener datos anteriores si hay error
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -198,11 +207,25 @@ export default function EntriesPage() {
       newItem.fechaCaducidad = med.expiresAt;
     }
 
-    setSelectedItems(prev => [...prev, newItem]);
+    setSelectedItems(prev => {
+      const updated = [...prev, newItem];
+      // Validar la fecha cuando se agrega un nuevo item
+      if (entryType === "salida" && dueDate) {
+        const error = validateDueDate(dueDate);
+        setDueDateError(error);
+      }
+      return updated;
+    });
     setSelectedMedId("");
     setItemQty("");
     setItemDosis("");
     setItemFrecuencia("");
+    
+    // Validar fecha si ya está seleccionada
+    if (dueDate) {
+      const error = validateDueDate(dueDate);
+      setDueDateError(error);
+    }
   };
 
   // ---------- Agregar item (Entrada: NUEVO) ----------
@@ -250,6 +273,15 @@ export default function EntriesPage() {
     if ((entryType === "salida" || entryType === "caducidad") && !patientId) {
       alert("Selecciona un paciente");
       return;
+    }
+
+    // Validar fecha antes de crear
+    if (entryType === "salida" && dueDate) {
+      const error = validateDueDate(dueDate);
+      if (error) {
+        alert(error);
+        return;
+      }
     }
 
     try {
@@ -411,10 +443,33 @@ export default function EntriesPage() {
                 type="date"
                 size="small"
                 value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
+                onChange={(e) => {
+                  const newDate = e.target.value;
+                  setDueDate(newDate);
+                  const error = validateDueDate(newDate);
+                  setDueDateError(error);
+                }}
                 InputLabelProps={{ shrink: true }}
                 fullWidth
-                helperText="Próxima fecha estimada para entregar medicamentos"
+                error={!!dueDateError}
+                helperText={dueDateError || "Próxima fecha estimada para entregar medicamentos"}
+                inputProps={{
+                  max: selectedItems.length > 0 
+                    ? (() => {
+                        // Encontrar la fecha de caducidad más temprana
+                        const dates = selectedItems
+                          .map(item => item.fechaCaducidad)
+                          .filter((date): date is string => !!date)
+                          .map(date => new Date(date));
+                        if (dates.length > 0) {
+                          const minDate = new Date(Math.min(...dates.map(d => d.getTime())));
+                          minDate.setDate(minDate.getDate() - 1); // Un día antes de la caducidad
+                          return minDate.toISOString().split('T')[0];
+                        }
+                        return undefined;
+                      })()
+                    : undefined
+                }}
               />
             )}
 
@@ -691,11 +746,22 @@ export default function EntriesPage() {
         </Paper>
       )}
 
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
       <Typography variant="body2" color="text.secondary" mb={1}>
-        Mostrando {filteredEntries.length} de {entries.length} registros
+        {loading ? "Cargando..." : `Mostrando ${filteredEntries.length} de ${entries.length} registros`}
       </Typography>
 
-      <Table headers={["Folio", "Tipo", "Paciente", "Items", "Total", "Fecha", "Estado", "Acciones"]}>
+      {loading && entries.length === 0 ? (
+        <Alert severity="info" sx={{ mt: 2 }}>
+          Cargando registros, por favor espere...
+        </Alert>
+      ) : (
+        <Table headers={["Folio", "Tipo", "Paciente", "Items", "Total", "Fecha", "Estado", "Acciones"]}>
         <AnimatePresence initial={false}>
           {filteredEntries.map(entry => (
             <motion.tr
@@ -761,8 +827,9 @@ export default function EntriesPage() {
           ))}
         </AnimatePresence>
       </Table>
+      )}
 
-      {filteredEntries.length === 0 && (
+      {!loading && filteredEntries.length === 0 && (
         <Alert severity="info" sx={{ mt: 2 }}>
           No se encontraron registros.
         </Alert>
@@ -857,7 +924,7 @@ export default function EntriesPage() {
                             <td style={{ padding: 8 }}>
                               {item.fechaCaducidad ? new Date(item.fechaCaducidad).toLocaleDateString() : "-"}
                             </td>
-                          </>
+                          </> 
                         )}
                         {printEntry.type === "caducidad" && (
                           <td style={{ padding: 8 }}>

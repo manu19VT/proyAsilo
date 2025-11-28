@@ -2,25 +2,40 @@ import { ID, Patient, Contact, Medication, EntryRequest, PersonalObject, User, P
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
-// Helper para hacer peticiones HTTP
+// Helper para hacer peticiones HTTP con timeout
 async function request<T>(
   endpoint: string,
-  options?: RequestInit
+  options?: RequestInit,
+  timeout: number = 60000 // 60 segundos por defecto (aumentado para producción)
 ): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-    ...options,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Error desconocido' }));
-    throw new Error(error.error || `Error ${response.status}`);
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...options?.headers,
+      },
+      ...options,
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Error desconocido' }));
+      throw new Error(error.error || `Error ${response.status}`);
+    }
+
+    return response.json();
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error('La petición tardó demasiado tiempo. Por favor, intente nuevamente.');
+    }
+    throw error;
   }
-
-  return response.json();
 }
 
 export const api = {
@@ -293,16 +308,17 @@ export const api = {
     });
   },
 
-  deleteUser: async (id: ID) => {
+  deleteUser: async (id: ID, password: string) => {
     return request<void>(`/users/${id}`, {
       method: 'DELETE',
+      body: JSON.stringify({ password }),
     });
   },
 
-  changePassword: async (userId: ID, password: string, requireChange = false) => {
+  changePassword: async (userId: ID, currentPassword: string, newPassword: string, requireChange = false) => {
     return request<User>(`/users/${userId}/change-password`, {
       method: 'POST',
-      body: JSON.stringify({ password, requireChange }),
+      body: JSON.stringify({ currentPassword, newPassword, requireChange }),
     });
   },
 };

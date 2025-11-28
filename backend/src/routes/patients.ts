@@ -1,5 +1,7 @@
 import express from 'express';
 import { patientService } from '../services/PatientService';
+import { mockService } from '../services/MockService';
+import { isMockMode } from '../utils/mockMode';
 
 const router = express.Router();
 
@@ -13,6 +15,16 @@ router.get('/', async (req, res) => {
       userId?: string;
       userRole?: string;
     };
+    
+    if (isMockMode()) {
+      const patients = mockService.listPatients({
+        query: q,
+        status: status === 'activo' || status === 'baja' ? status : undefined,
+        contactName,
+      });
+      return res.json(patients);
+    }
+    
     const patients = await patientService.listPatients({
       query: q,
       status: status === 'activo' || status === 'baja' ? status : undefined,
@@ -29,6 +41,14 @@ router.get('/', async (req, res) => {
 // Obtener paciente por ID
 router.get('/:id', async (req, res) => {
   try {
+    if (isMockMode()) {
+      const patient = mockService.getPatientById(req.params.id);
+      if (!patient) {
+        return res.status(404).json({ error: 'Paciente no encontrado' });
+      }
+      return res.json(patient);
+    }
+    
     const patient = await patientService.getPatientById(req.params.id);
     if (!patient) {
       return res.status(404).json({ error: 'Paciente no encontrado' });
@@ -42,6 +62,11 @@ router.get('/:id', async (req, res) => {
 // Crear paciente
 router.post('/', async (req, res) => {
   try {
+    if (isMockMode()) {
+      const patient = mockService.addPatient(req.body);
+      return res.status(201).json(patient);
+    }
+    
     // Obtener el rol del usuario si se proporciona userId
     let userRole: string | undefined = req.body.userRole;
     if (!userRole && req.body.userId) {
@@ -66,6 +91,14 @@ router.post('/', async (req, res) => {
 // Actualizar paciente
 router.put('/:id', async (req, res) => {
   try {
+    if (isMockMode()) {
+      const patient = mockService.updatePatient(req.params.id, req.body);
+      if (!patient) {
+        return res.status(404).json({ error: 'Paciente no encontrado' });
+      }
+      return res.json(patient);
+    }
+    
     const patient = await patientService.updatePatient(req.params.id, {
       ...req.body,
       updatedBy: req.body.userId || null,
@@ -87,6 +120,18 @@ router.post('/:id/discharge', async (req, res) => {
     if (!reason || typeof reason !== 'string') {
       return res.status(400).json({ error: 'reason es requerido' });
     }
+    
+    if (isMockMode()) {
+      const patient = mockService.getPatientById(req.params.id);
+      if (!patient) {
+        return res.status(404).json({ error: 'Paciente no encontrado' });
+      }
+      patient.status = 'baja';
+      patient.dischargeDate = new Date().toISOString();
+      patient.dischargeReason = reason;
+      return res.json(patient);
+    }
+    
     const patient = await patientService.dischargePatient(req.params.id, reason, userId);
     if (!patient) {
       return res.status(404).json({ error: 'Paciente no encontrado' });
@@ -99,6 +144,14 @@ router.post('/:id/discharge', async (req, res) => {
 
 router.post('/:id/reactivate', async (req, res) => {
   try {
+    if (isMockMode()) {
+      const patient = mockService.restorePatient(req.params.id);
+      if (!patient) {
+        return res.status(404).json({ error: 'Paciente no encontrado' });
+      }
+      return res.json(patient);
+    }
+    
     const { userId } = req.body || {};
     const patient = await patientService.reactivatePatient(req.params.id, userId);
     if (!patient) {
@@ -113,6 +166,14 @@ router.post('/:id/reactivate', async (req, res) => {
 // Eliminar paciente (soft delete)
 router.delete('/:id', async (req, res) => {
   try {
+    if (isMockMode()) {
+      const deleted = mockService.deletePatient(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: 'Paciente no encontrado' });
+      }
+      return res.json({ message: 'Paciente eliminado correctamente' });
+    }
+    
     const { userId, userName } = req.body || {};
     const deleted = await patientService.deletePatient(req.params.id, userId, userName);
     if (!deleted) {
@@ -127,6 +188,14 @@ router.delete('/:id', async (req, res) => {
 // Restaurar paciente eliminado (soft delete)
 router.post('/:id/restore', async (req, res) => {
   try {
+    if (isMockMode()) {
+      const patient = mockService.restorePatient(req.params.id);
+      if (!patient) {
+        return res.status(404).json({ error: 'Paciente no encontrado o no está eliminado' });
+      }
+      return res.json({ message: 'Paciente restaurado correctamente' });
+    }
+    
     const { userId } = req.body || {};
     const restored = await patientService.restorePatient(req.params.id, userId);
     if (!restored) {
@@ -143,6 +212,11 @@ router.post('/:id/restore', async (req, res) => {
 // Listar contactos de un paciente
 router.get('/:patientId/contacts', async (req, res) => {
   try {
+    if (isMockMode()) {
+      const patient = mockService.getPatientById(req.params.patientId);
+      return res.json(patient?.contacts || []);
+    }
+    
     const contacts = await patientService.getContactsByPatientId(req.params.patientId);
     res.json(contacts);
   } catch (error: any) {
@@ -153,6 +227,11 @@ router.get('/:patientId/contacts', async (req, res) => {
 // Agregar contacto a paciente
 router.post('/:patientId/contacts', async (req, res) => {
   try {
+    if (isMockMode()) {
+      const contact = mockService.addContact(req.params.patientId, req.body);
+      return res.status(201).json(contact);
+    }
+    
     const contact = await patientService.createContact({
       patientId: req.params.patientId,
       ...req.body
@@ -166,6 +245,14 @@ router.post('/:patientId/contacts', async (req, res) => {
 // Actualizar contacto
 router.put('/contacts/:contactId', async (req, res) => {
   try {
+    if (isMockMode()) {
+      const contact = mockService.updateContact(req.params.contactId, req.body);
+      if (!contact) {
+        return res.status(404).json({ error: 'Contacto no encontrado' });
+      }
+      return res.json(contact);
+    }
+    
     const contact = await patientService.updateContact(req.params.contactId, req.body);
     if (!contact) {
       return res.status(404).json({ error: 'Contacto no encontrado' });
@@ -179,6 +266,14 @@ router.put('/contacts/:contactId', async (req, res) => {
 // Eliminar contacto
 router.delete('/contacts/:contactId', async (req, res) => {
   try {
+    if (isMockMode()) {
+      const deleted = mockService.deleteContact(req.params.contactId);
+      if (!deleted) {
+        return res.status(404).json({ error: 'Contacto no encontrado' });
+      }
+      return res.json({ message: 'Contacto eliminado correctamente' });
+    }
+    
     const deleted = await patientService.deleteContact(req.params.contactId);
     if (!deleted) {
       return res.status(404).json({ error: 'Contacto no encontrado' });

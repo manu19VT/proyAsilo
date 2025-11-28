@@ -19,7 +19,9 @@
     "test-patients": "ts-node src/database/test-patients.ts",
     "fix-patients": "ts-node src/database/fix-patients-all.ts",
     "reset-db": "ts-node src/database/reset-database.ts",
-    "create-fresh": "ts-node src/database/create-fresh-schema.ts"
+    "create-fresh": "ts-node src/database/create-fresh-schema.ts",
+    "add-indexes": "ts-node src/database/add-indexes.ts",
+    "add-eliminado-objects": "ts-node src/database/add-eliminado-personal-objects.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",

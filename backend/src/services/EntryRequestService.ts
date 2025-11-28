@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { EntryRequest, ID } from '../types';
-import { query, queryOne, execute } from '../database/database';
+import { query, queryOne, execute, getDatabase } from '../database/database';
 import { patientMedicationService } from './PatientMedicationService';
 
 interface EntryFilters {
@@ -35,6 +35,7 @@ export class EntryRequestService {
   }
 
   async listEntryRequests(filters?: EntryFilters): Promise<EntryRequest[]> {
+    // Primero obtener solo las entradas (sin items) - más eficiente
     let sql = `
       SELECT 
         id,
@@ -65,12 +66,76 @@ export class EntryRequestService {
 
     sql += ' ORDER BY fecha_creacion DESC';
 
-    const rows = await query<any>(sql, params);
-    const entries = await Promise.all(rows.map(async (row) => {
-      const items = await this.getItemsByEntryId(row.id);
-      return this.mapRow(row, items);
-    }));
-    return entries;
+    // Obtener solo las entradas primero
+    const entries = await query<any>(sql, params);
+    
+    if (entries.length === 0) {
+      return [];
+    }
+
+    // Obtener todos los items de estas entradas en una sola consulta usando subconsulta
+    // Esto es más eficiente que múltiples consultas
+    const entryIds = entries.map(e => e.id);
+    
+    // Construir consulta segura usando parámetros de tabla de valores
+    // Para SQL Server, usamos una tabla de valores temporal
+    const pool = await getDatabase();
+    const request = pool.request();
+    
+    // Si hay muchos IDs, dividir en lotes para evitar problemas de rendimiento
+    const BATCH_SIZE = 100;
+    const itemsMap = new Map<string, { medicationId: ID; qty: number; dosisRecomendada?: string; frecuencia?: string; fechaCaducidad?: string }[]>();
+    
+    // Inicializar el mapa con arrays vacíos para todas las entradas
+    entryIds.forEach(id => {
+      itemsMap.set(id, []);
+    });
+    
+    for (let i = 0; i < entryIds.length; i += BATCH_SIZE) {
+      const batch = entryIds.slice(i, i + BATCH_SIZE);
+      // Escapar comillas simples para prevenir SQL injection
+      const batchIds = batch.map(id => `'${id.replace(/'/g, "''")}'`).join(',');
+      
+      const itemsSql = `
+        SELECT 
+          solicitud_id as entryRequestId,
+          medicamento_id as medicationId,
+          cantidad as qty,
+          dosis_recomendada as dosisRecomendada,
+          frecuencia as frecuencia,
+          fecha_caducidad as fechaCaducidad
+        FROM entry_items
+        WHERE solicitud_id IN (${batchIds})
+        ORDER BY solicitud_id, medicamento_id
+      `;
+
+      try {
+        const itemsResult = await request.query(itemsSql);
+        const itemsRows = itemsResult.recordset;
+        
+        for (const item of itemsRows) {
+          const entryId = item.entryRequestId;
+          if (itemsMap.has(entryId)) {
+            itemsMap.get(entryId)!.push({
+              medicationId: item.medicationId,
+              qty: item.qty,
+              dosisRecomendada: item.dosisRecomendada || undefined,
+              frecuencia: item.frecuencia || undefined,
+              fechaCaducidad: item.fechaCaducidad || undefined
+            });
+          }
+        }
+      } catch (error: any) {
+        console.error(`Error obteniendo items para lote ${i}-${i + BATCH_SIZE}:`, error);
+        // Continuar con el siguiente lote en caso de error
+      }
+    }
+
+    // Combinar entradas con sus items
+    return entries.map(entry => {
+      const items = itemsMap.get(entry.id) || [];
+      return this.mapRow(entry, items);
+    });
   }
 
   async getEntryRequestById(id: ID): Promise<EntryRequest | null> {

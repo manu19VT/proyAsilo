@@ -42,7 +42,14 @@ export default function MedsPage() {
   const scanInputRef = useRef<HTMLInputElement>(null);
 
   const isExpired = useMemo(
-    () => (date: string) => new Date(date) < new Date(),
+    () => (date: string) => {
+      const expiry = new Date(date);
+      const now = new Date();
+      // Resetear horas para comparar solo fechas
+      expiry.setHours(0, 0, 0, 0);
+      now.setHours(0, 0, 0, 0);
+      return expiry <= now;
+    },
     []
   );
 
@@ -68,13 +75,18 @@ export default function MedsPage() {
   };
 
   const load = async () => {
+    setLoading(true);
+    setError(null);
     try {
       const medications = await api.listMeds();
       setItems(medications);
       setFilteredItems(medications);
-    } catch (error) {
-      console.error(error);
-      alert("Error al cargar medicamentos");
+    } catch (error: any) {
+      console.error("Error al cargar medicamentos:", error);
+      const errorMessage = error?.message || "Error desconocido al cargar los medicamentos";
+      setError(`Error al cargar los medicamentos: ${errorMessage}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -158,14 +170,22 @@ export default function MedsPage() {
     <Page>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
         <Typography variant="h5" fontWeight={700}>Medicamentos</Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => setShowForm(!showForm)}
-        >
-          {showForm ? "Cancelar" : "Nuevo Medicamento"}
-        </Button>
+        {canAddMedication && (
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setShowForm(!showForm)}
+          >
+            {showForm ? "Cancelar" : "Nuevo Medicamento"}
+          </Button>
+        )}
       </Stack>
+      
+      {!canAddMedication && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Solo administradores, doctores y enfermeras pueden agregar medicamentos.
+        </Alert>
+      )}
 
       {expiredCount > 0 && (
         <Alert severity="error" icon={<WarningIcon />} sx={{ mb: 2 }}>
@@ -322,8 +342,14 @@ export default function MedsPage() {
         </Paper>
       )}
 
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
       <Typography variant="body2" color="text.secondary" mb={1}>
-        Mostrando {filteredItems.length} de {items.length} medicamentos
+        {loading ? "Cargando..." : `Mostrando ${filteredItems.length} de ${items.length} medicamentos`}
       </Typography>
 
       <Table headers={["Medicamento", "Cantidad", "Unidad", "Dosis", "Caducidad", "Estado", "Código"]}>
@@ -351,8 +377,9 @@ export default function MedsPage() {
           ))}
         </AnimatePresence>
       </Table>
+      )}
 
-      {filteredItems.length === 0 && (
+      {!loading && filteredItems.length === 0 && (
         <Alert severity="info" sx={{ mt: 2 }}>
           No se encontraron medicamentos.
         </Alert>

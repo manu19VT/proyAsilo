@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { initDatabase } from './database/database';
+import { isMockMode } from './utils/mockMode';
 
 // Importar rutas
 import patientsRouter from './routes/patients';
@@ -19,11 +20,18 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Inicializar base de datos de forma asíncrona
-initDatabase().catch(err => {
-  console.error('Error inicializando base de datos:', err);
-  process.exit(1);
-});
+// Inicializar base de datos solo si no estamos en modo mock
+if (!isMockMode()) {
+  initDatabase().catch(err => {
+    console.error('Error inicializando base de datos:', err);
+    process.exit(1);
+  });
+} else {
+  console.log('Modo MOCK activado - Usando datos de prueba (sin base de datos)');
+  console.log(' Credenciales de prueba:');
+  console.log('   Email: admin@asilo.com');
+  console.log('   Contraseña: admin123');
+}
 
 // Rutas
 app.use('/api/patients', patientsRouter);
@@ -62,6 +70,9 @@ app.listen(PORT, () => {
   console.log(`Servidor ejecutándose: http://localhost:${PORT}`);
   console.log(`API disponible en http://localhost:${PORT}/api`);
   console.log(`Pagina corriendo: http://localhost:${PORT}/api/health`);
+  if (isMockMode()) {
+    console.log(`\n MODO DESARROLLO: Usando datos mock (no se requiere base de datos)`);
+  }
 });
 
 export default app;
