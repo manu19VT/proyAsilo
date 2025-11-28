@@ -174,6 +174,16 @@ export const api = {
     });
   },
 
+  // 🆕 Buscar por código de barras (si implementaste este endpoint)
+  findMedByBarcode: async (barcode: string) => {
+    try {
+      return await request<Medication>(`/medications/barcode/${encodeURIComponent(barcode)}`);
+    } catch (e) {
+      // Si tu backend devuelve 404, mejor regresamos null
+      return null as unknown as Medication;
+    }
+  },
+
   getPatientMedications: async (patientId: ID) => {
     return request<PatientMedication[]>(`/patient-medications/patients/${patientId}`);
   },
@@ -185,8 +195,9 @@ export const api = {
     });
   },
 
-  // ========== Solicitudes de Entrada ==========
-  listEntries: async (filters?: { type?: "entrada" | "salida"; patientId?: ID }) => {
+  // ========== Solicitudes de Entrada / Salida / Caducidad ==========
+  // 🆕 incluyo 'caducidad' en el filtro
+  listEntries: async (filters?: { type?: "entrada" | "salida" | "caducidad"; patientId?: ID }) => {
     const params = new URLSearchParams();
     if (filters?.type) params.append('type', filters.type);
     if (filters?.patientId) params.append('patientId', filters.patientId);
@@ -202,14 +213,20 @@ export const api = {
     return request<EntryRequest>(`/entry-requests/folio/${folio}`);
   },
 
-  addEntry: async (e: Omit<EntryRequest, "id" | "createdAt" | "folio"> & { userId?: string }) => {
+  // 🆕 acepto 'comment' opcional en el payload
+  addEntry: async (
+    e: Omit<EntryRequest, "id" | "createdAt" | "folio"> & { userId?: string; comment?: string }
+  ) => {
     return request<EntryRequest>('/entry-requests', {
       method: 'POST',
       body: JSON.stringify(e),
     });
   },
 
-  updateEntry: async (id: ID, e: Partial<Omit<EntryRequest, "id" | "createdAt" | "folio">>) => {
+  updateEntry: async (
+    id: ID,
+    e: Partial<Omit<EntryRequest, "id" | "createdAt" | "folio">> & { comment?: string }
+  ) => {
     return request<EntryRequest>(`/entry-requests/${id}`, {
       method: 'PUT',
       body: JSON.stringify(e),
@@ -305,5 +322,3 @@ export const api = {
     });
   },
 };
-
-
