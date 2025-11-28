@@ -45,6 +45,7 @@ export interface Medication {
   expiresAt: string; // ISO
   unit?: string;
   dosage?: string;
+  barcode?: string;
   createdAt?: string;
   updatedAt?: string;
   createdBy?: string; // ID del usuario que creó el medicamento
@@ -67,21 +68,32 @@ export interface PatientMedication {
   medicationDosage?: string;
 }
 
+/** NUEVO: tipos para entradas/salidas/caducidad */
+export type EntryType = "entrada" | "salida" | "caducidad";
+
+export interface EntryItem {
+  medicationId: ID;
+  qty: number;
+  /** Para salidas: dosis recomendada */
+  dosisRecomendada?: string;
+  /** Para salidas: frecuencia (cada 8h, etc.) */
+  frecuencia?: string;
+  /** Para salidas y caducidad: fecha de caducidad del medicamento */
+  fechaCaducidad?: string; // ISO
+}
+
 export interface EntryRequest {
   id: ID;
-  folio: string; // folio único para control
-  type: "entrada" | "salida"; // tipo de movimiento
+  folio: string; // folio único para control (E-YYYY-####, S-YYYY-####, C-YYYY-####)
+  type: EntryType; // "entrada" | "salida" | "caducidad"
   patientId: ID;
   createdAt: string;
-  items: { 
-    medicationId: ID; 
-    qty: number;
-    dosisRecomendada?: string; // dosis recomendada (solo para salidas)
-    frecuencia?: string; // cada cuándo tomar (solo para salidas)
-    fechaCaducidad?: string; // fecha de caducidad del medicamento (solo para salidas)
-  }[];
+  items: EntryItem[];
   status: "completa" | "incompleta";
-  dueDate?: string; // fecha para volver
+  /** Para salidas: próxima fecha estimada para volver */
+  dueDate?: string; // ISO
+  /** NUEVO: comentario libre (observaciones, motivo de baja, lote, etc.) */
+  comment?: string;
 }
 
 export interface PersonalObject {
