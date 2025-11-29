@@ -1,5 +1,6 @@
 import express from 'express';
 import { entryRequestService } from '../services/EntryRequestService';
+import { separateEntryService } from '../services/SeparateEntryService';
 import { mockService } from '../services/MockService';
 import { isMockMode } from '../utils/mockMode';
 
@@ -12,14 +13,15 @@ router.get('/', async (req, res) => {
     
     if (isMockMode()) {
       const entryRequests = mockService.listEntryRequests({
-        type: type === 'entrada' || type === 'salida' ? type : undefined,
+        type: type === 'entrada' || type === 'salida' || type === 'caducidad' ? type : undefined,
         patientId: patientId || undefined
       });
       return res.json(entryRequests);
     }
     
-    const entryRequests = await entryRequestService.listEntryRequests({
-      type: type === 'entrada' || type === 'salida' ? type : undefined,
+    // Usar el nuevo servicio con tablas separadas
+    const entryRequests = await separateEntryService.listEntryRequests({
+      type: type === 'entrada' || type === 'salida' || type === 'caducidad' ? type as any : undefined,
       patientId: patientId || undefined
     });
     res.json(entryRequests);
@@ -38,7 +40,7 @@ router.get('/folio/:folio', async (req, res) => {
       return res.json(entryRequest);
     }
     
-    const entryRequest = await entryRequestService.getEntryRequestByFolio(req.params.folio);
+    const entryRequest = await separateEntryService.getEntryRequestByFolio(req.params.folio);
     if (!entryRequest) {
       return res.status(404).json({ error: 'Solicitud no encontrada' });
     }
@@ -59,7 +61,7 @@ router.get('/:id', async (req, res) => {
       return res.json(entryRequest);
     }
     
-    const entryRequest = await entryRequestService.getEntryRequestById(req.params.id);
+    const entryRequest = await separateEntryService.getEntryRequestById(req.params.id);
     if (!entryRequest) {
       return res.status(404).json({ error: 'Solicitud no encontrada' });
     }
@@ -72,13 +74,13 @@ router.get('/:id', async (req, res) => {
 // Crear solicitud
 router.post('/', async (req, res) => {
   try {
-    const { type, patientId, items, status, dueDate, userId } = req.body || {};
+    const { type, patientId, items, status, dueDate, userId, comment } = req.body || {};
     if (!type || (type !== 'entrada' && type !== 'salida' && type !== 'caducidad')) {
       return res.status(400).json({ error: 'type debe ser "entrada", "salida" o "caducidad"' });
     }
-    // Para entradas, no se requiere patientId. Para salidas y caducidad, es obligatorio.
-    if (type !== 'entrada' && !patientId) {
-      return res.status(400).json({ error: 'patientId es requerido para salidas y caducidad' });
+    // Para entradas y caducidad, NO se requiere patientId. Solo para salidas.
+    if (type === 'salida' && !patientId) {
+      return res.status(400).json({ error: 'patientId es requerido para salidas' });
     }
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Debe incluir al menos un item' });
@@ -87,7 +89,7 @@ router.post('/', async (req, res) => {
     if (isMockMode()) {
       const entryRequest = mockService.addEntryRequest({
         type,
-        patientId,
+        patientId: type === 'entrada' || type === 'caducidad' ? undefined : patientId,
         items,
         status: status || 'completa',
         dueDate,
@@ -95,13 +97,14 @@ router.post('/', async (req, res) => {
       return res.status(201).json(entryRequest);
     }
 
-    const entryRequest = await entryRequestService.createEntryRequest({
+    const entryRequest = await separateEntryService.createEntryRequest({
       type,
-      patientId: type === 'entrada' ? undefined : patientId,
+      patientId: type === 'entrada' || type === 'caducidad' ? undefined : patientId,
       items,
       status: status || 'completa',
       dueDate,
-      userId
+      userId,
+      comment
     });
     res.status(201).json(entryRequest);
   } catch (error: any) {
@@ -120,7 +123,7 @@ router.put('/:id', async (req, res) => {
       return res.json(entryRequest);
     }
     
-    const entryRequest = await entryRequestService.updateEntryRequest(req.params.id, req.body);
+    const entryRequest = await separateEntryService.updateEntryRequest(req.params.id, req.body);
     if (!entryRequest) {
       return res.status(404).json({ error: 'Solicitud no encontrada' });
     }
@@ -141,7 +144,7 @@ router.delete('/:id', async (req, res) => {
       return res.json({ message: 'Solicitud eliminada correctamente' });
     }
     
-    const deleted = await entryRequestService.deleteEntryRequest(req.params.id);
+    const deleted = await separateEntryService.deleteEntryRequest(req.params.id);
     if (!deleted) {
       return res.status(404).json({ error: 'Solicitud no encontrada' });
     }

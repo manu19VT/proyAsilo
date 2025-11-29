@@ -182,6 +182,7 @@ export default function EntriesPage() {
     setScanMode(false);
     setBarcodeSearching(false);
     setShowForm(false);
+    setDueDateError(null);
   };
 
   const getMedById = useMemo(
@@ -298,7 +299,7 @@ export default function EntriesPage() {
       alert("Agrega al menos un medicamento");
       return;
     }
-    if ((entryType === "salida" || entryType === "caducidad") && !patientId) {
+    if (entryType === "salida" && !patientId) {
       alert("Selecciona un paciente");
       return;
     }
@@ -336,7 +337,7 @@ export default function EntriesPage() {
 
       const payload = {
         type: entryType,
-        patientId: entryType === "entrada" ? undefined : patientId,
+        patientId: (entryType === "entrada" || entryType === "caducidad") ? undefined : patientId,
         items: itemsToSend,
         status: "completa",
         dueDate: entryType === "salida" && dueDate ? new Date(dueDate).toISOString() : undefined,
@@ -372,7 +373,13 @@ export default function EntriesPage() {
   const startScan = () => {
     setScanMode(true);
     setNmBarcode("");
-    setTimeout(() => scanInputRef.current?.focus(), 0);
+    // Limpiar campos para nuevo escaneo
+    setNmName("");
+    setNmUnit("tabletas");
+    setNmDosage("");
+    setNmQty("");
+    setNmExpiresAt("");
+    setTimeout(() => scanInputRef.current?.focus(), 100);
   };
 
   // Buscar medicamento por código de barras cuando se ingresa
@@ -481,7 +488,15 @@ export default function EntriesPage() {
               </MenuItem>
             </TextField>
 
-            {entryType !== "entrada" ? (
+            {entryType === "entrada" ? (
+              <Alert severity="info">
+                Movimiento de <strong>Entrada</strong>: no requiere paciente (se registra a nombre de <em>Almacén</em>).
+              </Alert>
+            ) : entryType === "caducidad" ? (
+              <Alert severity="info">
+                Movimiento de <strong>Caducidad</strong>: no requiere paciente (baja por vencimiento de almacén).
+              </Alert>
+            ) : (
               <TextField
                 label="Paciente *"
                 select
@@ -496,10 +511,6 @@ export default function EntriesPage() {
                   </MenuItem>
                 ))}
               </TextField>
-            ) : (
-              <Alert severity="info">
-                Movimiento de <strong>Entrada</strong>: no requiere paciente (se registra a nombre de <em>Almacén</em>).
-              </Alert>
             )}
 
             {entryType === "salida" && (
@@ -610,38 +621,89 @@ export default function EntriesPage() {
                       fullWidth
                     />
                     <Button
-                      variant="outlined"
-                      color="warning"
+                      variant={scanMode ? "contained" : "outlined"}
+                      color={scanMode ? "warning" : "warning"}
                       startIcon={<QrCodeScannerIcon />}
-                      onClick={startScan}
+                      onClick={() => {
+                        if (scanMode) {
+                          // Cancelar modo escaneo
+                          setScanMode(false);
+                          scanInputRef.current?.blur();
+                        } else {
+                          startScan();
+                        }
+                      }}
                       sx={{ whiteSpace: "nowrap" }}
                     >
-                      Escanear con lector
+                      {scanMode ? "Cancelar escaneo" : "Escanear con lector"}
                     </Button>
                   </Stack>
 
+                  {/* Input oculto para capturar escaneo de lectores USB */}
                   <input
                     ref={scanInputRef}
                     value={nmBarcode}
-                    onChange={(e) => setNmBarcode(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        setScanMode(false);
-                        // Si hay un medicamento encontrado, saltar a cantidad, si no, a nombre
-                        if (nmName.trim()) {
-                          (document.getElementById("nm-qty") as HTMLInputElement | null)?.focus();
-                        } else {
-                          (document.getElementById("nm-name") as HTMLInputElement | null)?.focus();
-                        }
+                    onChange={(e) => {
+                      setNmBarcode(e.target.value);
+                      // Si el modo escaneo está activo y se detecta entrada rápida, es un escaneo
+                      if (scanMode && e.target.value.length > 0) {
+                        // El lector USB enviará Enter automáticamente al final
                       }
                     }}
-                    aria-hidden
-                    style={{ position: "absolute", opacity: 0, height: 0, width: 0, pointerEvents: "none" }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && nmBarcode.trim().length > 0) {
+                        e.preventDefault();
+                        setScanMode(false);
+                        // El efecto de búsqueda se ejecutará automáticamente
+                        setTimeout(() => {
+                          if (nmName.trim()) {
+                            (document.getElementById("nm-qty") as HTMLInputElement | null)?.focus();
+                          } else {
+                            (document.getElementById("nm-name") as HTMLInputElement | null)?.focus();
+                          }
+                        }, 300);
+                      }
+                    }}
+                    onBlur={() => {
+                      // Si se pierde el foco y hay código, podría ser un escaneo completo
+                      if (scanMode && nmBarcode.trim().length > 0) {
+                        // Esperar un momento para ver si viene un Enter
+                        setTimeout(() => {
+                          if (nmBarcode.trim().length > 0 && !scanInputRef.current?.matches(":focus")) {
+                            // Si no hay foco y hay código, podría ser escaneo completo
+                            // Pero mejor esperar Enter explícito
+                          }
+                        }, 100);
+                      }
+                    }}
+                    placeholder=""
+                    autoComplete="off"
+                    aria-hidden="true"
+                    tabIndex={-1}
+                    style={{ 
+                      position: "absolute", 
+                      opacity: 0, 
+                      height: 0, 
+                      width: 0, 
+                      pointerEvents: scanMode ? "auto" : "none",
+                      left: "-9999px"
+                    }}
                   />
                   {scanMode && (
-                    <Typography variant="caption" color="text.secondary">
-                      Modo escaneo activo: apunta el lector y presiona Enter para terminar.
-                    </Typography>
+                    <Alert severity="info" sx={{ mt: 1 }}>
+                      <Typography variant="caption" fontWeight="bold">
+                        Modo escaneo activo
+                      </Typography>
+                      <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
+                        • <strong>Lector USB:</strong> Apunta y escanea. El código se capturará automáticamente.
+                      </Typography>
+                      <Typography variant="caption" display="block">
+                        • <strong>App móvil:</strong> Asegúrate de que esté configurada como teclado virtual.
+                      </Typography>
+                      <Typography variant="caption" display="block" sx={{ mt: 0.5, fontStyle: "italic" }}>
+                        Presiona "Escanear con lector" nuevamente para cancelar.
+                      </Typography>
+                    </Alert>
                   )}
                   {barcodeSearching && (
                     <Typography variant="caption" color="primary">
@@ -838,7 +900,7 @@ export default function EntriesPage() {
               <Button
                 variant="contained"
                 onClick={handleCreateEntry}
-                disabled={(entryType !== "entrada" && !patientId) || selectedItems.length === 0}
+                disabled={(entryType === "salida" && !patientId) || selectedItems.length === 0}
                 fullWidth
               >
                 Guardar Registro
@@ -863,72 +925,106 @@ export default function EntriesPage() {
           Cargando registros, por favor espere...
         </Alert>
       ) : (
-        <Table headers={["Folio", "Tipo", "Paciente", "Items", "Total", "Fecha", "Estado", "Acciones"]}>
-        <AnimatePresence initial={false}>
-          {filteredEntries.map(entry => (
-            <motion.tr
-              key={entry.id}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.25 }}
-            >
-              <td style={{ padding: 8, fontFamily: "monospace", fontWeight: 700, color: "#f97316" }}>
-                {entry.folio}
-              </td>
-              <td style={{ padding: 8 }}>
-                {entry.type === "entrada" ? (
-                  <Chip label="Entrada" color="info" size="small" icon={<InventoryIcon />} />
-                ) : entry.type === "salida" ? (
-                  <Chip label="Salida" color="primary" size="small" icon={<ShippingIcon />} />
-                ) : (
-                  <Chip label="Caducidad" color="error" size="small" icon={<WarningIcon />} />
-                )}
-              </td>
-              <td style={{ padding: 8, fontWeight: 600 }}>
-                {getPatientName(entry.patientId)}
-              </td>
-              <td style={{ padding: 8 }}>
-                <Stack spacing={0.5}>
-                  {entry.items.slice(0, 2).map((item, index) => (
-                    <Typography key={index} variant="caption" display="block">
-                      • {getMedicationLabel(item.medicationId)}: {item.qty}
-                    </Typography>
-                  ))}
-                  {entry.items.length > 2 && (
-                    <Typography variant="caption" color="text.secondary">
-                      +{entry.items.length - 2} más...
-                    </Typography>
-                  )}
-                </Stack>
-              </td>
-              <td style={{ padding: 8, fontWeight: 600 }}>
-                {getTotalItems(entry)} items
-              </td>
-              <td style={{ padding: 8, fontSize: 12 }}>
-                {new Date(entry.createdAt).toLocaleDateString()}
-              </td>
-              <td style={{ padding: 8 }}>
-                <Chip
-                  label={entry.status === "completa" ? "Completa" : "Incompleta"}
-                  color={entry.status === "completa" ? "success" : "warning"}
-                  size="small"
-                />
-              </td>
-              <td style={{ padding: 8 }}>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  startIcon={<PrintIcon />}
-                  onClick={() => setPrintEntry(entry)}
-                >
-                  Imprimir
-                </Button>
-              </td>
-            </motion.tr>
-          ))}
-        </AnimatePresence>
-      </Table>
+        (() => {
+          // Determinar headers según el filtro
+          let headers: string[] = [];
+          if (typeFilter === "salida") {
+            headers = ["Folio", "Tipo", "Paciente", "Items", "Total", "Fecha", "Estado", "Acciones"];
+          } else if (typeFilter === "entrada") {
+            headers = ["Folio", "Tipo", "Items", "Total", "Fecha", "Estado", "Acciones"];
+          } else if (typeFilter === "caducidad") {
+            headers = ["Folio", "Tipo", "Items", "Total", "Fecha Caducidad", "Fecha Registro", "Estado", "Acciones"];
+          } else {
+            // Todos - mostrar todas las columnas
+            headers = ["Folio", "Tipo", "Paciente", "Items", "Total", "Fecha", "Estado", "Acciones"];
+          }
+
+          return (
+            <Table headers={headers}>
+              <AnimatePresence initial={false}>
+                {filteredEntries.map(entry => (
+                  <motion.tr
+                    key={entry.id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.25 }}
+                  >
+                    <td style={{ padding: 8, fontFamily: "monospace", fontWeight: 700, color: "#f97316" }}>
+                      {entry.folio}
+                    </td>
+                    <td style={{ padding: 8 }}>
+                      {entry.type === "entrada" ? (
+                        <Chip label="Entrada" color="info" size="small" icon={<InventoryIcon />} />
+                      ) : entry.type === "salida" ? (
+                        <Chip label="Salida" color="primary" size="small" icon={<ShippingIcon />} />
+                      ) : (
+                        <Chip label="Caducidad" color="error" size="small" icon={<WarningIcon />} />
+                      )}
+                    </td>
+                    {/* Mostrar Paciente solo para salidas o cuando el filtro es "todos" */}
+                    {(typeFilter === "salida" || typeFilter === "todos") && (
+                      <td style={{ padding: 8, fontWeight: 600 }}>
+                        {entry.type === "salida" ? getPatientName(entry.patientId) : "-"}
+                      </td>
+                    )}
+                    <td style={{ padding: 8 }}>
+                      <Stack spacing={0.5}>
+                        {entry.items.slice(0, 2).map((item, index) => (
+                          <Typography key={index} variant="caption" display="block">
+                            • {getMedicationLabel(item.medicationId)}: {item.qty}
+                          </Typography>
+                        ))}
+                        {entry.items.length > 2 && (
+                          <Typography variant="caption" color="text.secondary">
+                            +{entry.items.length - 2} más...
+                          </Typography>
+                        )}
+                      </Stack>
+                    </td>
+                    <td style={{ padding: 8, fontWeight: 600 }}>
+                      {getTotalItems(entry)} items
+                    </td>
+                    {/* Para caducidad, mostrar fecha de caducidad del medicamento y fecha de registro */}
+                    {typeFilter === "caducidad" ? (
+                      <>
+                        <td style={{ padding: 8, fontSize: 12 }}>
+                          {entry.items.length > 0 && entry.items[0].fechaCaducidad
+                            ? new Date(entry.items[0].fechaCaducidad).toLocaleDateString()
+                            : "-"}
+                        </td>
+                        <td style={{ padding: 8, fontSize: 12 }}>
+                          {new Date(entry.createdAt).toLocaleDateString()}
+                        </td>
+                      </>
+                    ) : (
+                      <td style={{ padding: 8, fontSize: 12 }}>
+                        {new Date(entry.createdAt).toLocaleDateString()}
+                      </td>
+                    )}
+                    <td style={{ padding: 8 }}>
+                      <Chip
+                        label={entry.status === "completa" ? "Completa" : "Incompleta"}
+                        color={entry.status === "completa" ? "success" : "warning"}
+                        size="small"
+                      />
+                    </td>
+                    <td style={{ padding: 8 }}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<PrintIcon />}
+                        onClick={() => setPrintEntry(entry)}
+                      >
+                        Imprimir
+                      </Button>
+                    </td>
+                  </motion.tr>
+                ))}
+              </AnimatePresence>
+            </Table>
+          );
+        })()
       )}
 
       {!loading && filteredEntries.length === 0 && (
@@ -968,9 +1064,11 @@ export default function EntriesPage() {
 
               <Box sx={{ my: 3, p: 2, border: "1px solid #ccc", borderRadius: 1 }}>
                 <Stack spacing={1}>
-                  <Typography variant="body1">
-                    <strong>Paciente:</strong> {getPatientName(printEntry.patientId)}
-                  </Typography>
+                  {printEntry.type !== "caducidad" && printEntry.type !== "entrada" && (
+                    <Typography variant="body1">
+                      <strong>Paciente:</strong> {getPatientName(printEntry.patientId)}
+                    </Typography>
+                  )}
                   <Typography variant="body1">
                     <strong>Fecha:</strong> {new Date(printEntry.createdAt).toLocaleString()}
                   </Typography>
@@ -1066,7 +1164,7 @@ export default function EntriesPage() {
                   <h1 style="text-align: center;">${entryTitle(printEntry.type as any)}</h1>
                   <h2 style="text-align: center; color: #f97316;">Folio: ${printEntry.folio}</h2>
                   <div style="margin: 24px 0; padding: 16px; border: 1px solid #ccc; border-radius: 8px;">
-                    <p><strong>Paciente:</strong> ${getPatientName(printEntry.patientId)}</p>
+                    ${printEntry.type !== "caducidad" && printEntry.type !== "entrada" ? `<p><strong>Paciente:</strong> ${getPatientName(printEntry.patientId)}</p>` : ""}
                     <p><strong>Fecha:</strong> ${new Date(printEntry.createdAt).toLocaleString()}</p>
                     <p><strong>Estado:</strong> ${printEntry.status === "completa" ? "Completa" : "Incompleta"}</p>
                     ${printEntry.dueDate ? `<p><strong>Próxima fecha:</strong> ${new Date(printEntry.dueDate).toLocaleDateString()}</p>` : ""}
