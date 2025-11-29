@@ -8,11 +8,13 @@ import {
   Chip,
   Alert,
   MenuItem,
-  Box
+  Box,
+  IconButton
 } from "@mui/material";
 import {
   Search as SearchIcon,
-  Warning as WarningIcon
+  Warning as WarningIcon,
+  Delete as DeleteIcon
 } from "@mui/icons-material";
 import { AnimatePresence, motion } from "framer-motion";
 import Page from "../components/Page";
@@ -103,6 +105,20 @@ export default function MedsPage() {
   const expiredCount = items.filter(m => isExpired(m.expiresAt)).length;
   const expiringSoonCount = items.filter(m => !isExpired(m.expiresAt) && isExpiringSoon(m.expiresAt)).length;
 
+  const handleDeleteMed = async (medId: string, medName: string) => {
+    if (!window.confirm(`¿Estás seguro de que deseas eliminar el medicamento "${medName}"?`)) {
+      return;
+    }
+    try {
+      await api.deleteMed(medId);
+      await load();
+    } catch (error: any) {
+      console.error("Error al eliminar medicamento:", error);
+      const errorMessage = error?.message || "Error desconocido al eliminar el medicamento";
+      alert(`Error al eliminar el medicamento: ${errorMessage}`);
+    }
+  };
+
   return (
     <Page>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
@@ -153,7 +169,7 @@ export default function MedsPage() {
         {loading ? "Cargando..." : `Mostrando ${filteredItems.length} de ${items.length} medicamentos`}
       </Typography>
 
-      <Table headers={["Medicamento", "Cantidad", "Unidad", "Dosis", "Caducidad", "Estado", "Código"]}>
+      <Table headers={user?.role === "admin" ? ["Medicamento", "Cantidad", "Unidad", "Dosis", "Caducidad", "Estado", "Código", "Acciones"] : ["Medicamento", "Cantidad", "Unidad", "Dosis", "Caducidad", "Estado", "Código"]}>
         <AnimatePresence initial={false}>
           {filteredItems.map(med => (
             <motion.tr
@@ -174,6 +190,18 @@ export default function MedsPage() {
               <td style={{ padding: 8, fontFamily: "monospace", fontSize: 12 }}>
                 {med.barcode || "-"}
               </td>
+              {user?.role === "admin" && (
+                <td style={{ padding: 8 }}>
+                  <IconButton
+                    size="small"
+                    color="error"
+                    onClick={() => handleDeleteMed(med.id, med.name)}
+                    title="Eliminar medicamento"
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </td>
+              )}
             </motion.tr>
           ))}
         </AnimatePresence>
