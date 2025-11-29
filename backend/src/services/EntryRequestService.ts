@@ -4,14 +4,14 @@ import { query, queryOne, execute, getDatabase } from '../database/database';
 import { patientMedicationService } from './PatientMedicationService';
 
 interface EntryFilters {
-  type?: "entrada" | "salida";
+  type?: "entrada" | "salida" | "caducidad";
   patientId?: ID;
 }
 
 export class EntryRequestService {
-  private async getNextFolio(type: "entrada" | "salida"): Promise<string> {
+  private async getNextFolio(type: "entrada" | "salida" | "caducidad"): Promise<string> {
     const year = new Date().getFullYear();
-    const prefix = type === "entrada" ? "E" : "S";
+    const prefix = type === "entrada" ? "E" : type === "salida" ? "S" : "C";
     const result = await queryOne<{ total?: number }>(`
       SELECT COUNT(*) AS total
       FROM entry_requests
@@ -183,8 +183,10 @@ export class EntryRequestService {
     const now = new Date().toISOString();
     const folio = await this.getNextFolio(data.type);
 
-    // Validar inventario para salidas
-    if (data.type === 'salida') {
+    // Para entradas, no se requiere paciente (paciente_id será NULL)
+
+    // Validar inventario para salidas y caducidad
+    if (data.type === 'salida' || data.type === 'caducidad') {
       for (const item of data.items) {
         const medication = await queryOne<{ qty: number; name: string }>(
           'SELECT cantidad as qty, nombre as name FROM medications WHERE id = @id',
@@ -199,18 +201,38 @@ export class EntryRequestService {
       }
     }
 
-    await execute(`
-      INSERT INTO entry_requests (id, folio, tipo, paciente_id, fecha_creacion, estado, fecha_vencimiento)
-      VALUES (@id, @folio, @type, @patientId, @createdAt, @status, @dueDate)
-    `, {
-      id,
-      folio,
-      type: data.type,
-      patientId: data.patientId,
-      createdAt: now,
-      status: data.status,
-      dueDate: data.dueDate || null
-    });
+    // Para entradas, no se usa paciente_id (será NULL). Para salidas y caducidad, es requerido.
+    if (data.type === 'entrada') {
+      // Para entradas, insertar sin paciente_id (será NULL)
+      await execute(`
+        INSERT INTO entry_requests (id, folio, tipo, paciente_id, fecha_creacion, estado, fecha_vencimiento)
+        VALUES (@id, @folio, @type, NULL, @createdAt, @status, @dueDate)
+      `, {
+        id,
+        folio,
+        type: data.type,
+        createdAt: now,
+        status: data.status,
+        dueDate: data.dueDate || null
+      });
+    } else {
+      // Para salidas y caducidad, paciente_id es obligatorio
+      if (!data.patientId) {
+        throw new Error('patientId es requerido para salidas y caducidad');
+      }
+      await execute(`
+        INSERT INTO entry_requests (id, folio, tipo, paciente_id, fecha_creacion, estado, fecha_vencimiento)
+        VALUES (@id, @folio, @type, @patientId, @createdAt, @status, @dueDate)
+      `, {
+        id,
+        folio,
+        type: data.type,
+        patientId: data.patientId,
+        createdAt: now,
+        status: data.status,
+        dueDate: data.dueDate || null
+      });
+    }
     
     for (const item of data.items) {
       await this.createEntryItem({
@@ -247,10 +269,18 @@ export class EntryRequestService {
             console.error('Error al registrar medicamento en patient_medications:', error);
           }
         }
-      } else {
+      } else if (data.type === 'entrada') {
+        // Para entradas, aumentar la cantidad
         await execute(`
           UPDATE medications
           SET cantidad = cantidad + @qty, fecha_actualizacion = @updatedAt
+          WHERE id = @medicationId
+        `, { medicationId: item.medicationId, qty: item.qty, updatedAt: now });
+      } else if (data.type === 'caducidad') {
+        // Para caducidad, disminuir la cantidad
+        await execute(`
+          UPDATE medications
+          SET cantidad = cantidad - @qty, fecha_actualizacion = @updatedAt
           WHERE id = @medicationId
         `, { medicationId: item.medicationId, qty: item.qty, updatedAt: now });
       }

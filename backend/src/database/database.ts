@@ -7,8 +7,23 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // Configuración de conexión desde variables de entorno
+// Manejar formato servidor:puerto o servidor,puerto
+const dbServer = process.env.DB_SERVER || 'localhost';
+let serverName = dbServer;
+let port: number | undefined = undefined;
+
+// Si el servidor incluye puerto (formato: servidor,puerto o servidor:puerto)
+if (dbServer.includes(',') || dbServer.includes(':')) {
+  const parts = dbServer.split(/[,:]/);
+  serverName = parts[0].trim();
+  if (parts[1]) {
+    port = parseInt(parts[1].trim(), 10);
+  }
+}
+
 const config: any = {
-  server: process.env.DB_SERVER || 'localhost',
+  server: serverName,
+  port: port,
   database: process.env.DB_NAME || 'AsiloDB',
   user: process.env.DB_USER || 'sa',
   password: process.env.DB_PASSWORD || '',

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   TextField,
   Button,
@@ -11,10 +11,8 @@ import {
   Box
 } from "@mui/material";
 import {
-  Add as AddIcon,
   Search as SearchIcon,
-  Warning as WarningIcon,
-  QrCodeScanner as QrCodeScannerIcon
+  Warning as WarningIcon
 } from "@mui/icons-material";
 import { AnimatePresence, motion } from "framer-motion";
 import Page from "../components/Page";
@@ -29,17 +27,8 @@ export default function MedsPage() {
   const [items, setItems] = useState<Medication[]>([]);
   const [filteredItems, setFilteredItems] = useState<Medication[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-
-  const [showForm, setShowForm] = useState(false);
-  const [barcode, setBarcode] = useState("");
-  const [name, setName] = useState("");
-  const [qty, setQty] = useState("");
-  const [expiresAt, setExpiresAt] = useState("");
-  const [unit, setUnit] = useState("tabletas");
-  const [dosage, setDosage] = useState("");
-
-  const [scanMode, setScanMode] = useState(false);
-  const scanInputRef = useRef<HTMLInputElement>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const isExpired = useMemo(
     () => (date: string) => {
@@ -111,81 +100,18 @@ export default function MedsPage() {
     );
   }, [items, searchQuery]);
 
-  const resetForm = () => {
-    setBarcode("");
-    setName("");
-    setQty("");
-    setExpiresAt("");
-    setUnit("tabletas");
-    setDosage("");
-    setShowForm(false);
-    setScanMode(false);
-  };
-
-  const handleAddMedication = async () => {
-    if (!name.trim() || !qty || !expiresAt) {
-      alert("Completa todos los campos obligatorios");
-      return;
-    }
-    if (Number(qty) <= 0) {
-      alert("La cantidad debe ser mayor a 0");
-      return;
-    }
-    try {
-      await api.addMed({
-        name: name.trim(),
-        qty: Number(qty),
-        expiresAt,
-        unit: unit.trim() || undefined,
-        dosage: dosage.trim() || undefined,
-        barcode: barcode.trim() || undefined,
-        userId: user?.id
-      } as any);
-      resetForm();
-      load();
-    } catch (error) {
-      console.error(error);
-      alert("Error al agregar medicamento");
-    }
-  };
-
   const expiredCount = items.filter(m => isExpired(m.expiresAt)).length;
   const expiringSoonCount = items.filter(m => !isExpired(m.expiresAt) && isExpiringSoon(m.expiresAt)).length;
-
-  // --- escáner ---
-  const startScan = () => {
-    setScanMode(true);
-    setBarcode("");
-    setTimeout(() => scanInputRef.current?.focus(), 0);
-  };
-
-  const handleScanKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      setScanMode(false);
-      (document.getElementById("med-name-input") as HTMLInputElement | null)?.focus();
-    }
-  };
 
   return (
     <Page>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
         <Typography variant="h5" fontWeight={700}>Medicamentos</Typography>
-        {canAddMedication && (
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setShowForm(!showForm)}
-          >
-            {showForm ? "Cancelar" : "Nuevo Medicamento"}
-          </Button>
-        )}
       </Stack>
       
-      {!canAddMedication && (
-        <Alert severity="info" sx={{ mb: 2 }}>
-          Solo administradores, doctores y enfermeras pueden agregar medicamentos.
-        </Alert>
-      )}
+      <Alert severity="info" sx={{ mb: 2 }}>
+        Para agregar nuevos medicamentos, ve al apartado de <strong>Entradas y Salidas</strong> y selecciona "Entrada" al crear un nuevo registro.
+      </Alert>
 
       {expiredCount > 0 && (
         <Alert severity="error" icon={<WarningIcon />} sx={{ mb: 2 }}>
@@ -216,131 +142,6 @@ export default function MedsPage() {
           }}
         />
       </Paper>
-
-      {showForm && (
-        <Paper sx={{ p: 2, mb: 2, bgcolor: "#f7f0dc" }}>
-          <Typography variant="h6" gutterBottom>Nuevo Medicamento</Typography>
-
-          <Stack spacing={2}>
-            {/* === Código de barras + botón a la derecha en el mismo renglón === */}
-            <Stack
-              direction={{ xs: "column", sm: "row" }}
-              spacing={1.5}
-              alignItems={{ xs: "stretch", sm: "center" }}
-            >
-              <TextField
-                label="Código de barras"
-                size="small"
-                value={barcode}
-                onChange={(e) => setBarcode(e.target.value)}
-                fullWidth
-                placeholder="Escanéalo o escríbelo manualmente"
-              />
-              <Button
-                variant="outlined"
-                color="warning"
-                startIcon={<QrCodeScannerIcon />}
-                onClick={startScan}
-                sx={{ whiteSpace: "nowrap" }}
-              >
-                Escanear con lector
-              </Button>
-            </Stack>
-
-            {/* input oculto para el lector */}
-            <input
-              ref={scanInputRef}
-              value={barcode}
-              onChange={(e) => setBarcode(e.target.value)}
-              onKeyDown={handleScanKeyDown}
-              aria-hidden
-              style={{
-                position: "absolute",
-                opacity: 0,
-                height: 0,
-                width: 0,
-                pointerEvents: "none"
-              }}
-            />
-            <Typography variant="caption" color="text.secondary">
-              {scanMode
-                ? "Modo escaneo activo: apunta el lector al código y presiona Enter al finalizar."
-                : "Tip: pulsa “Escanear con lector” para capturar con un lector USB/Bluetooth."}
-            </Typography>
-
-            <TextField
-              id="med-name-input"
-              label="Nombre del medicamento *"
-              size="small"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              fullWidth
-              placeholder="Ej: Paracetamol, Ibuprofeno, etc."
-            />
-
-            <Stack direction="row" spacing={2}>
-              <TextField
-                label="Cantidad *"
-                type="number"
-                size="small"
-                value={qty}
-                onChange={(e) => setQty(e.target.value)}
-                fullWidth
-                inputProps={{ min: 1 }}
-              />
-
-              <TextField
-                label="Unidad *"
-                select
-                size="small"
-                value={unit}
-                onChange={(e) => setUnit(e.target.value)}
-                fullWidth
-              >
-                <MenuItem value="tabletas">Tabletas</MenuItem>
-                <MenuItem value="ampolletas">Ampolletas</MenuItem>
-                <MenuItem value="sobres">Sobres</MenuItem>
-                <MenuItem value="frascos">Frascos</MenuItem>
-                <MenuItem value="cajas">Cajas</MenuItem>
-              </TextField>
-            </Stack>
-
-            <TextField
-              label="Fecha de caducidad *"
-              type="date"
-              size="small"
-              value={expiresAt}
-              onChange={(e) => setExpiresAt(e.target.value)}
-              InputLabelProps={{ shrink: true }}
-              fullWidth
-              helperText="Se alertará cuando falten 3 meses o menos para caducar"
-            />
-
-            <TextField
-              label="Dosis recomendada"
-              size="small"
-              value={dosage}
-              onChange={(e) => setDosage(e.target.value)}
-              fullWidth
-              placeholder="Ej: 500mg, 10ml, 1 tableta, etc."
-            />
-
-            <Stack direction="row" spacing={2}>
-              <Button variant="outlined" onClick={resetForm} fullWidth>
-                Cancelar
-              </Button>
-              <Button
-                variant="contained"
-                onClick={handleAddMedication}
-                disabled={!name.trim() || !qty || !expiresAt}
-                fullWidth
-              >
-                Guardar Medicamento
-              </Button>
-            </Stack>
-          </Stack>
-        </Paper>
-      )}
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
@@ -377,7 +178,6 @@ export default function MedsPage() {
           ))}
         </AnimatePresence>
       </Table>
-      )}
 
       {!loading && filteredItems.length === 0 && (
         <Alert severity="info" sx={{ mt: 2 }}>

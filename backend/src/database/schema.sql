@@ -928,6 +928,21 @@ GO
 -- Solo crear constraints si la columna estado existe
 IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'patients' AND COLUMN_NAME = 'estado')
 BEGIN
+    -- Eliminar constraint DEFAULT existente si existe (cualquier nombre)
+    DECLARE @defaultConstraintName NVARCHAR(200);
+    SELECT TOP 1 @defaultConstraintName = name 
+    FROM sys.default_constraints 
+    WHERE parent_object_id = OBJECT_ID('patients') 
+      AND parent_column_id = (SELECT column_id FROM sys.columns WHERE object_id = OBJECT_ID('patients') AND name = 'estado');
+    
+    IF @defaultConstraintName IS NOT NULL AND @defaultConstraintName <> 'DF_patients_estado'
+    BEGIN
+        DECLARE @dropDefaultSql NVARCHAR(400);
+        SET @dropDefaultSql = N'ALTER TABLE patients DROP CONSTRAINT [' + @defaultConstraintName + N']';
+        EXEC sp_executesql @dropDefaultSql;
+    END
+    
+    -- Crear constraint DEFAULT si no existe
     IF NOT EXISTS (
         SELECT 1 FROM sys.default_constraints 
         WHERE parent_object_id = OBJECT_ID('patients') 
@@ -938,6 +953,8 @@ BEGIN
         SET @addPatientsEstadoDefaultSql = N'ALTER TABLE patients ADD CONSTRAINT DF_patients_estado DEFAULT ''activo'' FOR estado';
         EXEC sp_executesql @addPatientsEstadoDefaultSql;
     END
+    
+    -- Crear constraint CHECK si no existe
     IF NOT EXISTS (
         SELECT 1 FROM sys.check_constraints 
         WHERE parent_object_id = OBJECT_ID('patients') 
@@ -1031,6 +1048,17 @@ GO
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'medications' AND COLUMN_NAME = 'dosis')
 BEGIN
     ALTER TABLE medications ADD dosis NVARCHAR(255) NULL;
+END
+GO
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'medications' AND COLUMN_NAME = 'codigo_barras')
+BEGIN
+    ALTER TABLE medications ADD codigo_barras NVARCHAR(255) NULL;
+END
+GO
+IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'medications' AND COLUMN_NAME = 'codigo_barras')
+   AND NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_medications_codigo_barras' AND object_id = OBJECT_ID('medications'))
+BEGIN
+    CREATE INDEX idx_medications_codigo_barras ON medications(codigo_barras);
 END
 GO
 

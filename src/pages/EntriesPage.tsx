@@ -50,7 +50,39 @@ type NewMedDraft = {
   barcode?: string;
 };
 
-const WAREHOUSE_PATIENT_ID = "__ALMACEN__";
+// Para entradas, no se requiere paciente
+
+// Función para validar la fecha de retorno
+const validateDueDate = (dueDate: string, selectedItems: SelectedItem[]): string | null => {
+  if (!dueDate) return null;
+  
+  const due = new Date(dueDate);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  if (due < today) {
+    return "La fecha no puede ser anterior a hoy";
+  }
+  
+  // Validar que la fecha no sea posterior a la caducidad más temprana
+  if (selectedItems.length > 0) {
+    const expiryDates = selectedItems
+      .map(item => item.fechaCaducidad)
+      .filter((date): date is string => !!date)
+      .map(date => new Date(date));
+    
+    if (expiryDates.length > 0) {
+      const minExpiry = new Date(Math.min(...expiryDates.map(d => d.getTime())));
+      minExpiry.setHours(0, 0, 0, 0);
+      
+      if (due >= minExpiry) {
+        return `La fecha no puede ser posterior o igual a la fecha de caducidad más temprana (${minExpiry.toLocaleDateString()})`;
+      }
+    }
+  }
+  
+  return null;
+};
 
 export default function EntriesPage() {
   const { user } = useAuth();
@@ -87,6 +119,7 @@ export default function EntriesPage() {
   const [scanMode, setScanMode] = useState(false);
   const scanInputRef = useRef<HTMLInputElement>(null);
   const [newMeds, setNewMeds] = useState<Record<string, NewMedDraft>>({});
+  const [barcodeSearching, setBarcodeSearching] = useState(false);
 
   const [printEntry, setPrintEntry] = useState<EntryRequest | null>(null);
 
@@ -147,6 +180,7 @@ export default function EntriesPage() {
     setNmDosage("");
     setNewMeds({});
     setScanMode(false);
+    setBarcodeSearching(false);
     setShowForm(false);
   };
 
@@ -156,7 +190,7 @@ export default function EntriesPage() {
   );
 
   const getPatientName = (id?: string) =>
-    !id || id === WAREHOUSE_PATIENT_ID
+    !id
       ? "Almacén"
       : patients.find(p => p.id === id)?.name || "Desconocido";
 
@@ -211,7 +245,7 @@ export default function EntriesPage() {
       const updated = [...prev, newItem];
       // Validar la fecha cuando se agrega un nuevo item
       if (entryType === "salida" && dueDate) {
-        const error = validateDueDate(dueDate);
+        const error = validateDueDate(dueDate, updated);
         setDueDateError(error);
       }
       return updated;
@@ -220,12 +254,6 @@ export default function EntriesPage() {
     setItemQty("");
     setItemDosis("");
     setItemFrecuencia("");
-    
-    // Validar fecha si ya está seleccionada
-    if (dueDate) {
-      const error = validateDueDate(dueDate);
-      setDueDateError(error);
-    }
   };
 
   // ---------- Agregar item (Entrada: NUEVO) ----------
@@ -277,7 +305,7 @@ export default function EntriesPage() {
 
     // Validar fecha antes de crear
     if (entryType === "salida" && dueDate) {
-      const error = validateDueDate(dueDate);
+      const error = validateDueDate(dueDate, selectedItems);
       if (error) {
         alert(error);
         return;
@@ -308,7 +336,7 @@ export default function EntriesPage() {
 
       const payload = {
         type: entryType,
-        patientId: entryType === "entrada" ? WAREHOUSE_PATIENT_ID : patientId,
+        patientId: entryType === "entrada" ? undefined : patientId,
         items: itemsToSend,
         status: "completa",
         dueDate: entryType === "salida" && dueDate ? new Date(dueDate).toISOString() : undefined,
@@ -316,15 +344,20 @@ export default function EntriesPage() {
         userId: user?.id
       } as any;
 
-      await api.addEntry(payload);
+      const createdEntry = await api.addEntry(payload);
+      const entryTypeName = entryType === "entrada" ? "Entrada" : entryType === "salida" ? "Salida" : "Caducidad";
       alert(
-        `${entryType === "entrada" ? "Entrada" : entryType === "salida" ? "Salida" : "Caducidad"} registrada correctamente`
+        `${entryTypeName} registrada correctamente.\n\nFolio: ${createdEntry.folio}\n\nSe abrirá el folio para imprimir.`
       );
+      
+      // Mostrar el folio para imprimir
+      setPrintEntry(createdEntry);
       resetForm();
       load();
-    } catch (error) {
-      console.error(error);
-      alert("Error al registrar el movimiento");
+    } catch (error: any) {
+      console.error("Error completo:", error);
+      const errorMessage = error?.message || error?.error || "Error desconocido al registrar el movimiento";
+      alert(`Error al registrar el movimiento: ${errorMessage}`);
     }
   };
 
@@ -341,6 +374,38 @@ export default function EntriesPage() {
     setNmBarcode("");
     setTimeout(() => scanInputRef.current?.focus(), 0);
   };
+
+  // Buscar medicamento por código de barras cuando se ingresa
+  useEffect(() => {
+    if (!nmBarcode.trim() || !entryType || entryType !== "entrada") return;
+    
+    const searchBarcode = async () => {
+      setBarcodeSearching(true);
+      try {
+        const found = await api.findMedByBarcode(nmBarcode.trim());
+        if (found) {
+          // Llenar campos automáticamente
+          setNmName(found.name);
+          setNmUnit(found.unit || "tabletas");
+          setNmDosage(found.dosage || "");
+          // No llenamos cantidad ni fecha de caducidad porque pueden variar
+          // El usuario puede ajustar estos campos antes de agregar
+        }
+      } catch (error) {
+        // Si no se encuentra, no hacer nada - el usuario puede llenar manualmente
+      } finally {
+        setBarcodeSearching(false);
+      }
+    };
+
+    // Debounce para evitar búsquedas excesivas - solo buscar si el código tiene al menos 3 caracteres
+    if (nmBarcode.trim().length >= 3) {
+      const timeoutId = setTimeout(searchBarcode, 500);
+      return () => clearTimeout(timeoutId);
+    } else {
+      setBarcodeSearching(false);
+    }
+  }, [nmBarcode, entryType]);
 
   const getTotalItems = (entry: EntryRequest) =>
     entry.items.reduce((sum, item) => sum + item.qty, 0);
@@ -446,7 +511,7 @@ export default function EntriesPage() {
                 onChange={(e) => {
                   const newDate = e.target.value;
                   setDueDate(newDate);
-                  const error = validateDueDate(newDate);
+                  const error = validateDueDate(newDate, selectedItems);
                   setDueDateError(error);
                 }}
                 InputLabelProps={{ shrink: true }}
@@ -562,7 +627,12 @@ export default function EntriesPage() {
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         setScanMode(false);
-                        (document.getElementById("nm-name") as HTMLInputElement | null)?.focus();
+                        // Si hay un medicamento encontrado, saltar a cantidad, si no, a nombre
+                        if (nmName.trim()) {
+                          (document.getElementById("nm-qty") as HTMLInputElement | null)?.focus();
+                        } else {
+                          (document.getElementById("nm-name") as HTMLInputElement | null)?.focus();
+                        }
                       }
                     }}
                     aria-hidden
@@ -573,6 +643,16 @@ export default function EntriesPage() {
                       Modo escaneo activo: apunta el lector y presiona Enter para terminar.
                     </Typography>
                   )}
+                  {barcodeSearching && (
+                    <Typography variant="caption" color="primary">
+                      Buscando medicamento...
+                    </Typography>
+                  )}
+                  {nmBarcode.trim() && !barcodeSearching && nmName.trim() && (
+                    <Alert severity="success" sx={{ mt: 1 }}>
+                      Medicamento encontrado: {nmName}. Puedes ajustar los datos si es necesario.
+                    </Alert>
+                  )}
 
                   <TextField
                     id="nm-name"
@@ -581,10 +661,17 @@ export default function EntriesPage() {
                     value={nmName}
                     onChange={(e) => setNmName(e.target.value)}
                     fullWidth
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        (document.getElementById("nm-qty") as HTMLInputElement | null)?.focus();
+                      }
+                    }}
                   />
 
                   <Stack direction="row" spacing={1.5}>
                     <TextField
+                      id="nm-qty"
                       label="Cantidad *"
                       type="number"
                       size="small"
@@ -592,6 +679,12 @@ export default function EntriesPage() {
                       onChange={(e) => setNmQty(e.target.value)}
                       inputProps={{ min: 1 }}
                       fullWidth
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          (document.getElementById("nm-expires") as HTMLInputElement | null)?.focus();
+                        }
+                      }}
                     />
                     <TextField
                       label="Unidad *"
@@ -610,6 +703,7 @@ export default function EntriesPage() {
                   </Stack>
 
                   <TextField
+                    id="nm-expires"
                     label="Fecha de caducidad *"
                     type="date"
                     size="small"
@@ -617,6 +711,14 @@ export default function EntriesPage() {
                     onChange={(e) => setNmExpiresAt(e.target.value)}
                     InputLabelProps={{ shrink: true }}
                     fullWidth
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        if (nmName.trim() && nmQty && nmExpiresAt) {
+                          addItemEntradaNuevo();
+                        }
+                      }
+                    }}
                   />
 
                   <TextField
