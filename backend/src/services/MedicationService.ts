@@ -13,6 +13,7 @@ export class MedicationService {
         m.fecha_vencimiento as expiresAt,
         m.unidad as unit,
         m.dosis as dosage,
+        m.codigo_barras as barcode,
         m.fecha_creacion as createdAt,
         m.fecha_actualizacion as updatedAt,
         m.creado_por as createdBy,
@@ -31,6 +32,7 @@ export class MedicationService {
           LOWER(m.nombre) LIKE @query
           OR LOWER(m.unidad) LIKE @query
           OR LOWER(m.dosis) LIKE @query
+          OR LOWER(m.codigo_barras) LIKE @query
       `;
       params.query = `%${search.toLowerCase()}%`;
     }
@@ -51,6 +53,7 @@ export class MedicationService {
         m.fecha_vencimiento as expiresAt,
         m.unidad as unit,
         m.dosis as dosage,
+        m.codigo_barras as barcode,
         m.fecha_creacion as createdAt,
         m.fecha_actualizacion as updatedAt,
         m.creado_por as createdBy,
@@ -65,6 +68,31 @@ export class MedicationService {
     return medication;
   }
 
+  // Obtener medicamento por código de barras
+  async getMedicationByBarcode(barcode: string): Promise<Medication | null> {
+    const medication = await queryOne<Medication>(`
+      SELECT 
+        m.id,
+        m.nombre as name,
+        m.cantidad as qty,
+        m.fecha_vencimiento as expiresAt,
+        m.unidad as unit,
+        m.dosis as dosage,
+        m.codigo_barras as barcode,
+        m.fecha_creacion as createdAt,
+        m.fecha_actualizacion as updatedAt,
+        m.creado_por as createdBy,
+        m.actualizado_por as updatedBy,
+        u1.nombre as createdByName,
+        u2.nombre as updatedByName
+      FROM medications m
+      LEFT JOIN users u1 ON m.creado_por = u1.id
+      LEFT JOIN users u2 ON m.actualizado_por = u2.id
+      WHERE LOWER(m.codigo_barras) = LOWER(@barcode)
+    `, { barcode });
+    return medication;
+  }
+
   // Crear medicamento
   async createMedication(data: Omit<Medication, 'id' | 'createdAt' | 'updatedAt'> & { createdBy?: string }): Promise<Medication> {
     const id = uuidv4();
@@ -75,8 +103,8 @@ export class MedicationService {
     }
     
     await execute(`
-      INSERT INTO medications (id, nombre, cantidad, fecha_vencimiento, unidad, dosis, fecha_creacion, fecha_actualizacion, creado_por, actualizado_por)
-      VALUES (@id, @name, @qty, @expiresAt, @unit, @dosage, @createdAt, @updatedAt, @createdBy, @updatedBy)
+      INSERT INTO medications (id, nombre, cantidad, fecha_vencimiento, unidad, dosis, codigo_barras, fecha_creacion, fecha_actualizacion, creado_por, actualizado_por)
+      VALUES (@id, @name, @qty, @expiresAt, @unit, @dosage, @barcode, @createdAt, @updatedAt, @createdBy, @updatedBy)
     `, {
       id,
       name: data.name,
@@ -84,6 +112,7 @@ export class MedicationService {
       expiresAt: data.expiresAt,
       unit: data.unit || null,
       dosage: data.dosage || null,
+      barcode: data.barcode || null,
       createdAt: now,
       updatedAt: now,
       createdBy: data.createdBy || null,
@@ -108,6 +137,7 @@ export class MedicationService {
           fecha_vencimiento = COALESCE(@expiresAt, fecha_vencimiento),
           unidad = COALESCE(@unit, unidad),
           dosis = COALESCE(@dosage, dosis),
+          codigo_barras = COALESCE(@barcode, codigo_barras),
           fecha_actualizacion = @updatedAt,
           actualizado_por = COALESCE(@updatedBy, actualizado_por)
       WHERE id = @id
@@ -117,6 +147,7 @@ export class MedicationService {
       expiresAt: data.expiresAt || null,
       unit: data.unit || null,
       dosage: data.dosage || null,
+      barcode: data.barcode || null,
       updatedAt: now,
       updatedBy: data.updatedBy || null,
       id

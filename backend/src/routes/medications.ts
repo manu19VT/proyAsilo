@@ -122,4 +122,27 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// Buscar medicamento por código de barras
+router.get('/barcode/:barcode', async (req, res) => {
+  try {
+    const { barcode } = req.params;
+    
+    if (isMockMode()) {
+      const medication = mockService.findMedByBarcode(barcode);
+      if (!medication) {
+        return res.status(404).json({ error: 'Medicamento no encontrado' });
+      }
+      return res.json(medication);
+    }
+    
+    const medication = await medicationService.getMedicationByBarcode(barcode);
+    if (!medication) {
+      return res.status(404).json({ error: 'Medicamento no encontrado' });
+    }
+    res.json(medication);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

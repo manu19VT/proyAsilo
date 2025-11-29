@@ -73,11 +73,12 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const { type, patientId, items, status, dueDate, userId } = req.body || {};
-    if (!type || (type !== 'entrada' && type !== 'salida')) {
-      return res.status(400).json({ error: 'type debe ser "entrada" o "salida"' });
+    if (!type || (type !== 'entrada' && type !== 'salida' && type !== 'caducidad')) {
+      return res.status(400).json({ error: 'type debe ser "entrada", "salida" o "caducidad"' });
     }
-    if (!patientId) {
-      return res.status(400).json({ error: 'patientId es requerido' });
+    // Para entradas, no se requiere patientId. Para salidas y caducidad, es obligatorio.
+    if (type !== 'entrada' && !patientId) {
+      return res.status(400).json({ error: 'patientId es requerido para salidas y caducidad' });
     }
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Debe incluir al menos un item' });
@@ -96,7 +97,7 @@ router.post('/', async (req, res) => {
 
     const entryRequest = await entryRequestService.createEntryRequest({
       type,
-      patientId,
+      patientId: type === 'entrada' ? undefined : patientId,
       items,
       status: status || 'completa',
       dueDate,
