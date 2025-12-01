@@ -344,13 +344,26 @@ export default function EntriesPage() {
         userId: user?.id
       };
       
-      // Solo agregar patientId para salidas
+      // IMPORTANTE: Solo agregar patientId para salidas
+      // Para entrada y caducidad, NO incluir patientId en absoluto
       if (entryType === "salida") {
+        if (!patientId) {
+          alert("Selecciona un paciente para la salida");
+          return;
+        }
         payload.patientId = patientId;
         if (dueDate) {
           payload.dueDate = new Date(dueDate).toISOString();
         }
       }
+      // Para entrada y caducidad, explícitamente NO incluir patientId
+      // Esto asegura que el backend no lo requiera
+
+      console.log('Enviando payload:', { 
+        type: payload.type, 
+        hasPatientId: 'patientId' in payload,
+        patientId: payload.patientId 
+      });
 
       const createdEntry = await api.addEntry(payload);
       const entryTypeName = entryType === "entrada" ? "Entrada" : entryType === "salida" ? "Salida" : "Caducidad";

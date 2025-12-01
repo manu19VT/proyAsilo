@@ -76,6 +76,14 @@ router.post('/', async (req, res) => {
   try {
     const { type, patientId, items, status, dueDate, userId, comment } = req.body || {};
     
+    // Log para depuración
+    console.log('POST /entry-requests - Datos recibidos:', {
+      type,
+      hasPatientId: !!patientId,
+      patientId: patientId ? 'presente' : 'ausente',
+      itemsCount: items?.length || 0
+    });
+    
     // Validar tipo
     if (!type) {
       return res.status(400).json({ error: 'type es requerido' });
@@ -87,14 +95,22 @@ router.post('/', async (req, res) => {
     }
     
     // Para entradas y caducidad, NO se requiere patientId. Solo para salidas.
+    // IMPORTANTE: Esta validación solo aplica a salidas
     if (type === 'salida') {
-      if (!patientId || patientId.trim() === '') {
+      if (!patientId || (typeof patientId === 'string' && patientId.trim() === '')) {
         return res.status(400).json({ error: 'patientId es requerido para salidas' });
       }
     }
     
     // Para entrada y caducidad, asegurarse de que patientId no se envíe
+    // Esto es crítico: NO enviar patientId para entrada o caducidad
     const finalPatientId = (type === 'entrada' || type === 'caducidad') ? undefined : (patientId || undefined);
+    
+    console.log('POST /entry-requests - Después de validación:', {
+      type,
+      finalPatientId: finalPatientId ? 'presente' : 'undefined',
+      willRequirePatient: type === 'salida'
+    });
     
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Debe incluir al menos un item' });
@@ -123,6 +139,7 @@ router.post('/', async (req, res) => {
     res.status(201).json(entryRequest);
   } catch (error: any) {
     console.error('Error al crear entrada:', error);
+    console.error('Stack trace:', error.stack);
     res.status(400).json({ error: error.message || 'Error al registrar el movimiento' });
   }
 });

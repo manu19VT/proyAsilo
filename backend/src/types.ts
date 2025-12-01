@@ -68,18 +68,19 @@ export interface PatientMedication {
 export interface EntryRequest {
   id: ID;
   folio: string;
-  type: "entrada" | "salida";
-  patientId: ID;
+  type: "entrada" | "salida" | "caducidad";
+  patientId?: ID; // Opcional: solo requerido para salidas
   createdAt: string;
   items: { 
     medicationId: ID; 
     qty: number;
     dosisRecomendada?: string; // dosis recomendada (solo para salidas)
     frecuencia?: string; // cada cuándo tomar (solo para salidas)
-    fechaCaducidad?: string; // fecha de caducidad del medicamento (solo para salidas)
+    fechaCaducidad?: string; // fecha de caducidad del medicamento (para salidas y caducidad)
   }[];
   status: "completa" | "incompleta";
   dueDate?: string;
+  comment?: string; // comentario opcional
 }
 
 export interface PersonalObject {
