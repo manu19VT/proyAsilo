@@ -75,13 +75,27 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const { type, patientId, items, status, dueDate, userId, comment } = req.body || {};
-    if (!type || (type !== 'entrada' && type !== 'salida' && type !== 'caducidad')) {
-      return res.status(400).json({ error: 'type debe ser "entrada", "salida" o "caducidad"' });
+    
+    // Validar tipo
+    if (!type) {
+      return res.status(400).json({ error: 'type es requerido' });
     }
+    
+    const validTypes = ['entrada', 'salida', 'caducidad'];
+    if (!validTypes.includes(type)) {
+      return res.status(400).json({ error: `type debe ser uno de: ${validTypes.join(', ')}` });
+    }
+    
     // Para entradas y caducidad, NO se requiere patientId. Solo para salidas.
-    if (type === 'salida' && !patientId) {
-      return res.status(400).json({ error: 'patientId es requerido para salidas' });
+    if (type === 'salida') {
+      if (!patientId || patientId.trim() === '') {
+        return res.status(400).json({ error: 'patientId es requerido para salidas' });
+      }
     }
+    
+    // Para entrada y caducidad, asegurarse de que patientId no se envíe
+    const finalPatientId = (type === 'entrada' || type === 'caducidad') ? undefined : (patientId || undefined);
+    
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Debe incluir al menos un item' });
     }
@@ -89,7 +103,7 @@ router.post('/', async (req, res) => {
     if (isMockMode()) {
       const entryRequest = mockService.addEntryRequest({
         type,
-        patientId: type === 'entrada' || type === 'caducidad' ? undefined : patientId,
+        patientId: finalPatientId,
         items,
         status: status || 'completa',
         dueDate,
@@ -99,7 +113,7 @@ router.post('/', async (req, res) => {
 
     const entryRequest = await separateEntryService.createEntryRequest({
       type,
-      patientId: type === 'entrada' || type === 'caducidad' ? undefined : patientId,
+      patientId: finalPatientId,
       items,
       status: status || 'completa',
       dueDate,
@@ -108,7 +122,8 @@ router.post('/', async (req, res) => {
     });
     res.status(201).json(entryRequest);
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    console.error('Error al crear entrada:', error);
+    res.status(400).json({ error: error.message || 'Error al registrar el movimiento' });
   }
 });
 

@@ -335,15 +335,22 @@ export default function EntriesPage() {
         }
       }
 
-      const payload = {
+      // Construir payload sin patientId para entrada y caducidad
+      const payload: any = {
         type: entryType,
-        patientId: (entryType === "entrada" || entryType === "caducidad") ? undefined : patientId,
         items: itemsToSend,
         status: "completa",
-        dueDate: entryType === "salida" && dueDate ? new Date(dueDate).toISOString() : undefined,
         comment: comment.trim() || undefined,
         userId: user?.id
-      } as any;
+      };
+      
+      // Solo agregar patientId para salidas
+      if (entryType === "salida") {
+        payload.patientId = patientId;
+        if (dueDate) {
+          payload.dueDate = new Date(dueDate).toISOString();
+        }
+      }
 
       const createdEntry = await api.addEntry(payload);
       const entryTypeName = entryType === "entrada" ? "Entrada" : entryType === "salida" ? "Salida" : "Caducidad";
@@ -941,49 +948,49 @@ export default function EntriesPage() {
 
           return (
             <Table headers={headers}>
-              <AnimatePresence initial={false}>
-                {filteredEntries.map(entry => (
-                  <motion.tr
-                    key={entry.id}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    transition={{ duration: 0.25 }}
-                  >
-                    <td style={{ padding: 8, fontFamily: "monospace", fontWeight: 700, color: "#f97316" }}>
-                      {entry.folio}
-                    </td>
-                    <td style={{ padding: 8 }}>
-                      {entry.type === "entrada" ? (
-                        <Chip label="Entrada" color="info" size="small" icon={<InventoryIcon />} />
-                      ) : entry.type === "salida" ? (
-                        <Chip label="Salida" color="primary" size="small" icon={<ShippingIcon />} />
-                      ) : (
-                        <Chip label="Caducidad" color="error" size="small" icon={<WarningIcon />} />
-                      )}
-                    </td>
+        <AnimatePresence initial={false}>
+          {filteredEntries.map(entry => (
+            <motion.tr
+              key={entry.id}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.25 }}
+            >
+              <td style={{ padding: 8, fontFamily: "monospace", fontWeight: 700, color: "#f97316" }}>
+                {entry.folio}
+              </td>
+              <td style={{ padding: 8 }}>
+                {entry.type === "entrada" ? (
+                  <Chip label="Entrada" color="info" size="small" icon={<InventoryIcon />} />
+                ) : entry.type === "salida" ? (
+                  <Chip label="Salida" color="primary" size="small" icon={<ShippingIcon />} />
+                ) : (
+                  <Chip label="Caducidad" color="error" size="small" icon={<WarningIcon />} />
+                )}
+              </td>
                     {/* Mostrar Paciente solo para salidas o cuando el filtro es "todos" */}
                     {(typeFilter === "salida" || typeFilter === "todos") && (
-                      <td style={{ padding: 8, fontWeight: 600 }}>
+              <td style={{ padding: 8, fontWeight: 600 }}>
                         {entry.type === "salida" ? getPatientName(entry.patientId) : "-"}
-                      </td>
+              </td>
                     )}
-                    <td style={{ padding: 8 }}>
-                      <Stack spacing={0.5}>
-                        {entry.items.slice(0, 2).map((item, index) => (
-                          <Typography key={index} variant="caption" display="block">
-                            • {getMedicationLabel(item.medicationId)}: {item.qty}
-                          </Typography>
-                        ))}
-                        {entry.items.length > 2 && (
-                          <Typography variant="caption" color="text.secondary">
-                            +{entry.items.length - 2} más...
-                          </Typography>
-                        )}
-                      </Stack>
-                    </td>
-                    <td style={{ padding: 8, fontWeight: 600 }}>
-                      {getTotalItems(entry)} items
+              <td style={{ padding: 8 }}>
+                <Stack spacing={0.5}>
+                  {entry.items.slice(0, 2).map((item, index) => (
+                    <Typography key={index} variant="caption" display="block">
+                      • {getMedicationLabel(item.medicationId)}: {item.qty}
+                    </Typography>
+                  ))}
+                  {entry.items.length > 2 && (
+                    <Typography variant="caption" color="text.secondary">
+                      +{entry.items.length - 2} más...
+                    </Typography>
+                  )}
+                </Stack>
+              </td>
+              <td style={{ padding: 8, fontWeight: 600 }}>
+                {getTotalItems(entry)} items
                     </td>
                     {/* Para caducidad, mostrar fecha de caducidad del medicamento y fecha de registro */}
                     {typeFilter === "caducidad" ? (
@@ -992,37 +999,37 @@ export default function EntriesPage() {
                           {entry.items.length > 0 && entry.items[0].fechaCaducidad
                             ? new Date(entry.items[0].fechaCaducidad).toLocaleDateString()
                             : "-"}
-                        </td>
-                        <td style={{ padding: 8, fontSize: 12 }}>
-                          {new Date(entry.createdAt).toLocaleDateString()}
-                        </td>
+              </td>
+              <td style={{ padding: 8, fontSize: 12 }}>
+                {new Date(entry.createdAt).toLocaleDateString()}
+              </td>
                       </>
                     ) : (
                       <td style={{ padding: 8, fontSize: 12 }}>
                         {new Date(entry.createdAt).toLocaleDateString()}
                       </td>
                     )}
-                    <td style={{ padding: 8 }}>
-                      <Chip
-                        label={entry.status === "completa" ? "Completa" : "Incompleta"}
-                        color={entry.status === "completa" ? "success" : "warning"}
-                        size="small"
-                      />
-                    </td>
-                    <td style={{ padding: 8 }}>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        startIcon={<PrintIcon />}
-                        onClick={() => setPrintEntry(entry)}
-                      >
-                        Imprimir
-                      </Button>
-                    </td>
-                  </motion.tr>
-                ))}
-              </AnimatePresence>
-            </Table>
+              <td style={{ padding: 8 }}>
+                <Chip
+                  label={entry.status === "completa" ? "Completa" : "Incompleta"}
+                  color={entry.status === "completa" ? "success" : "warning"}
+                  size="small"
+                />
+              </td>
+              <td style={{ padding: 8 }}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<PrintIcon />}
+                  onClick={() => setPrintEntry(entry)}
+                >
+                  Imprimir
+                </Button>
+              </td>
+            </motion.tr>
+          ))}
+        </AnimatePresence>
+      </Table>
           );
         })()
       )}
@@ -1065,9 +1072,9 @@ export default function EntriesPage() {
               <Box sx={{ my: 3, p: 2, border: "1px solid #ccc", borderRadius: 1 }}>
                 <Stack spacing={1}>
                   {printEntry.type !== "caducidad" && printEntry.type !== "entrada" && (
-                    <Typography variant="body1">
-                      <strong>Paciente:</strong> {getPatientName(printEntry.patientId)}
-                    </Typography>
+                  <Typography variant="body1">
+                    <strong>Paciente:</strong> {getPatientName(printEntry.patientId)}
+                  </Typography>
                   )}
                   <Typography variant="body1">
                     <strong>Fecha:</strong> {new Date(printEntry.createdAt).toLocaleString()}

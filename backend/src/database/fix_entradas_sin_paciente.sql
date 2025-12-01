@@ -54,3 +54,5 @@ PRINT 'Script completado. Ahora las entradas pueden registrarse sin paciente.';
 GO
 
 
+
+

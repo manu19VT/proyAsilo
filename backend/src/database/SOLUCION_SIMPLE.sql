@@ -19,3 +19,22 @@ PRINT 'Listo! Ahora paciente_id permite NULL.';
 GO
 
 
+USE db_ac1425_asilodb;
+GO
+
+-- Verificar si paciente_id permite NULL
+SELECT 
+    COLUMN_NAME,
+    IS_NULLABLE,
+    DATA_TYPE
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_NAME = 'entry_requests' 
+  AND COLUMN_NAME = 'paciente_id';
+GO
+
+-- Ver entradas
+SELECT TOP 10 * FROM entry_requests ORDER BY fecha_creacion DESC;
+
+-- Ver medicamentos
+SELECT TOP 10 * FROM medications ORDER BY fecha_creacion DESC;
+
