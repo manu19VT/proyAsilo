@@ -89,3 +89,4 @@ PRINT 'Corrección completada';
 PRINT 'La fecha de caducidad se obtiene del medicamento (medications.fecha_vencimiento)';
 PRINT '========================================';
 
+

@@ -25,3 +25,4 @@ SELECT
         ELSE '✗ No existe: created_at'
     END as estado_created_at;
 
+

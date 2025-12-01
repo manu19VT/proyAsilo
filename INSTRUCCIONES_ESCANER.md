@@ -135,3 +135,5 @@ Si tienes problemas:
 3. Revisa que el código de barras sea válido
 4. Contacta al administrador del sistema si persisten los problemas
 
+
+

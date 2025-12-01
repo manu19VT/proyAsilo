@@ -239,3 +239,5 @@ PRINT '¡Base de datos local actualizada correctamente!';
 PRINT 'Ahora puedes probar los cambios en localhost.';
 GO
 
+
+

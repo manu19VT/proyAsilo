@@ -7,7 +7,7 @@
 -- IMPORTANTE: Este script es idempotente, puede ejecutarse múltiples veces
 -- ============================================================
 
-USE AsiloDB;
+USE db_ac1425_asilodb;
 GO
 
 PRINT '========================================';

@@ -169,3 +169,5 @@ Si necesitas algo **AHORA MISMO** y no puedes instalar nada:
 
 **Pero esto es solo temporal.** Para uso frecuente, usa "Barcode to PC" o una pistola USB.
 
+
+

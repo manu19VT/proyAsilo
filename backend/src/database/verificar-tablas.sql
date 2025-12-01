@@ -66,3 +66,4 @@ BEGIN
     SELECT 'caducidades' as tabla, COUNT(*) as total FROM caducidades;
 END
 
+
