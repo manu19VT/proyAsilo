@@ -57,8 +57,8 @@ export class SeparateEntryService {
   async listEntryRequests(filters?: EntryFilters): Promise<EntryRequest[]> {
     const { type } = filters || {};
     
-    if (!type || type === "todos") {
-      // Combinar todas las tablas
+    if (!type) {
+      // Combinar todas las tablas cuando no hay filtro
       const [entradas, salidas, caducidades] = await Promise.all([
         this.listEntradas(),
         this.listSalidas(),
@@ -450,7 +450,11 @@ export class SeparateEntryService {
       }
     }
 
-    return await this.getEntryRequestById(id)!;
+    const result = await this.getEntryRequestById(id);
+    if (!result) {
+      throw new Error('Error al crear la solicitud: no se pudo recuperar después de la creación');
+    }
+    return result;
   }
 
   async updateEntryRequest(id: ID, data: Partial<EntryRequest>): Promise<EntryRequest | null> {
