@@ -45,6 +45,7 @@ export interface Medication {
   expiresAt: string;
   unit?: string;
   dosage?: string;
+  barcode?: string;
   createdAt?: string;
   updatedAt?: string;
   createdBy?: string;

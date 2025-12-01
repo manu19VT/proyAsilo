@@ -322,6 +322,10 @@ export class MockService {
     return true;
   }
 
+  findMedByBarcode(barcode: string): Medication | null {
+    return mockData.medications.find(m => m.barcode === barcode) || null;
+  }
+
   // ========== Patient Medications ==========
   getPatientMedications(patientId: string): PatientMedication[] {
     return mockData.patientMedications.filter(pm => pm.patientId === patientId);

@@ -253,7 +253,7 @@ export class EntryRequestService {
         `, { medicationId: item.medicationId, qty: item.qty, updatedAt: now });
 
         // Registrar medicamento en patient_medications si tiene dosis y frecuencia
-        if (item.dosisRecomendada && item.frecuencia) {
+        if (item.dosisRecomendada && item.frecuencia && data.patientId) {
           try {
             await patientMedicationService.assignMedication({
               patientId: data.patientId,
