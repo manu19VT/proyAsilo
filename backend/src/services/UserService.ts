@@ -571,9 +571,19 @@ export class UserService {
         
         // Eliminar el usuario
         console.log('Ejecutando DELETE FROM users...');
-        const deleteResult = await request.query('DELETE FROM users WHERE id = @id');
-        const rowsAffected = deleteResult.rowsAffected[0];
-        console.log(`Filas afectadas al eliminar usuario: ${rowsAffected}`);
+        let deleteResult: any;
+        let rowsAffected = 0;
+        try {
+          deleteResult = await request.query('DELETE FROM users WHERE id = @id');
+          rowsAffected = deleteResult.rowsAffected[0];
+          console.log(`Filas afectadas al eliminar usuario: ${rowsAffected}`);
+        } catch (deleteError: any) {
+          console.error(`ERROR al ejecutar DELETE: ${deleteError.message}`);
+          console.error(`Código de error: ${deleteError.code}`);
+          console.error(`Stack: ${deleteError.stack}`);
+          // Re-lanzar el error para que la transacción se revierta
+          throw new Error(`No se pudo eliminar el usuario: ${deleteError.message}`);
+        }
         
         // Re-habilitar el trigger
         console.log('Re-habilitando trigger TRG_users_before_delete...');
