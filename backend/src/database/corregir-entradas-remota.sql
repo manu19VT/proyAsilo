@@ -192,3 +192,5 @@ PRINT 'NO debe tener columna paciente_id';
 PRINT '========================================';
 GO
 
+
+

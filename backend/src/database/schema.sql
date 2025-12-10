@@ -1128,6 +1128,8 @@ BEGIN
         dosis_recomendada NVARCHAR(255) NULL,
         frecuencia NVARCHAR(255) NULL,
         fecha_caducidad NVARCHAR(50) NULL,
+        nombre_medicamento NVARCHAR(255) NULL,
+        unidad NVARCHAR(50) NULL,
         CONSTRAINT FK_entry_items_solicitud FOREIGN KEY (solicitud_id) REFERENCES entry_requests(id) ON DELETE CASCADE,
         CONSTRAINT FK_entry_items_medicamento FOREIGN KEY (medicamento_id) REFERENCES medications(id) ON DELETE CASCADE
     );
@@ -1146,6 +1148,16 @@ GO
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'entry_items' AND COLUMN_NAME = 'fecha_caducidad')
 BEGIN
     ALTER TABLE entry_items ADD fecha_caducidad NVARCHAR(50) NULL;
+END
+GO
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'entry_items' AND COLUMN_NAME = 'nombre_medicamento')
+BEGIN
+    ALTER TABLE entry_items ADD nombre_medicamento NVARCHAR(255) NULL;
+END
+GO
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'entry_items' AND COLUMN_NAME = 'unidad')
+BEGIN
+    ALTER TABLE entry_items ADD unidad NVARCHAR(50) NULL;
 END
 GO
 

@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { EntryRequest, ID } from '../types';
 import { query, queryOne, execute, getDatabase } from '../database/database';
 import { patientMedicationService } from './PatientMedicationService';
+import { medicationService } from './MedicationService';
 
 interface EntryFilters {
   type?: "entrada" | "salida" | "caducidad";
@@ -176,13 +177,36 @@ export class SeparateEntryService {
   }
 
   private async getEntradaItems(entradaId: ID) {
-    return await query<{ medicationId: ID; qty: number }>(`
-      SELECT 
-        medicamento_id as medicationId,
-        cantidad as qty
-      FROM entrada_items
-      WHERE entrada_id = @entradaId
-    `, { entradaId });
+    try {
+      // Intentar seleccionar con nombre_medicamento y unidad (si existen las columnas)
+      return await query<{ medicationId: ID; qty: number; medicationName?: string; unit?: string; fechaCaducidad?: string }>(`
+        SELECT 
+          ei.medicamento_id as medicationId,
+          ei.cantidad as qty,
+          COALESCE(ei.nombre_medicamento, m.nombre) as medicationName,
+          COALESCE(ei.unidad, m.unidad) as unit,
+          ei.fecha_caducidad as fechaCaducidad
+        FROM entrada_items ei
+        LEFT JOIN medications m ON ei.medicamento_id = m.id
+        WHERE ei.entrada_id = @entradaId
+      `, { entradaId });
+    } catch (error: any) {
+      // Si falla por columnas faltantes, usar JOIN con medications
+      if (error.message && (error.message.includes('nombre_medicamento') || error.message.includes('unidad') || error.message.includes('fecha_caducidad') || error.message.includes('Invalid column name'))) {
+        return await query<{ medicationId: ID; qty: number; medicationName?: string; unit?: string; fechaCaducidad?: string }>(`
+          SELECT 
+            ei.medicamento_id as medicationId,
+            ei.cantidad as qty,
+            m.nombre as medicationName,
+            m.unidad as unit,
+            m.fecha_vencimiento as fechaCaducidad
+          FROM entrada_items ei
+          LEFT JOIN medications m ON ei.medicamento_id = m.id
+          WHERE ei.entrada_id = @entradaId
+        `, { entradaId });
+      }
+      throw error;
+    }
   }
 
   private async getSalidaItems(salidaId: ID) {
@@ -329,22 +353,162 @@ export class SeparateEntryService {
 
       // Crear items de entrada
       for (const item of data.items) {
-        await execute(`
-          INSERT INTO entrada_items (id, entrada_id, medicamento_id, cantidad)
-          VALUES (@itemId, @entradaId, @medicationId, @qty)
-        `, {
-          itemId: uuidv4(),
-          entradaId: id,
-          medicationId: item.medicationId,
-          qty: item.qty
+        // Para entradas: si hay medicationName pero el medicationId es temporal o no existe,
+        // buscar o crear el medicamento primero
+        let actualMedicationId = item.medicationId;
+        const medicationName = (item as any).medicationName;
+        const medicationUnit = (item as any).unit || '';
+        const fechaCaducidad = (item as any).fechaCaducidad;
+        const barcode = (item as any).barcode;
+        
+        if (medicationName) {
+          // Buscar medicamento existente por código de barras Y fecha de caducidad
+          // Si tienen el mismo código pero diferente fecha, son productos diferentes
+          let existingMed: { id: string; fecha_vencimiento: string } | null = null;
+          
+          if (barcode && fechaCaducidad) {
+            // Buscar por código de barras Y fecha de caducidad
+            existingMed = await queryOne<{ id: string; fecha_vencimiento: string }>(`
+              SELECT id, fecha_vencimiento 
+              FROM medications 
+              WHERE codigo_barras = @barcode 
+                AND CONVERT(DATE, fecha_vencimiento) = CONVERT(DATE, @fechaCaducidad)
+            `, { barcode, fechaCaducidad });
+          } else if (barcode) {
+            // Si solo hay código de barras (sin fecha), buscar solo por código
+            existingMed = await queryOne<{ id: string; fecha_vencimiento: string }>(`
+              SELECT id, fecha_vencimiento 
+              FROM medications 
+              WHERE codigo_barras = @barcode
+            `, { barcode });
+          } else {
+            // Si no hay código de barras, buscar solo por nombre
+            existingMed = await queryOne<{ id: string; fecha_vencimiento: string }>(`
+              SELECT id, fecha_vencimiento 
+              FROM medications 
+              WHERE LOWER(nombre) = LOWER(@name)
+            `, { name: medicationName });
+          }
+          
+          if (existingMed) {
+            // Verificar si la fecha de caducidad es diferente
+            const existingDate = existingMed.fecha_vencimiento ? new Date(existingMed.fecha_vencimiento).toISOString().split('T')[0] : null;
+            const newDate = fechaCaducidad ? new Date(fechaCaducidad).toISOString().split('T')[0] : null;
+            
+            if (existingDate && newDate && existingDate !== newDate) {
+              // Fecha de caducidad diferente: crear un nuevo medicamento
+              console.log(`[SeparateEntryService] Mismo código de barras pero fecha diferente. Creando nuevo medicamento.`);
+              console.log(`  Existente: ${existingDate}, Nuevo: ${newDate}`);
+              const newMedication = await medicationService.createMedication({
+                name: medicationName,
+                qty: 0,
+                unit: medicationUnit,
+                expiresAt: fechaCaducidad || new Date().toISOString(),
+                barcode: barcode || undefined,
+                createdBy: data.userId
+              });
+              actualMedicationId = newMedication.id;
+              console.log(`[SeparateEntryService] ✓ Nuevo medicamento creado con ID: ${actualMedicationId} (fecha diferente)`);
+            } else {
+              // Mismo código y misma fecha (o sin fecha): usar el medicamento existente e incrementar stock
+              actualMedicationId = existingMed.id;
+              console.log(`[SeparateEntryService] Usando medicamento existente: ${actualMedicationId}`);
+              
+              // Si se proporcionó código de barras y el medicamento no lo tiene, actualizarlo
+              if (barcode) {
+                const medHasBarcode = await queryOne<{ codigo_barras: string }>(`
+                  SELECT codigo_barras FROM medications WHERE id = @id
+                `, { id: actualMedicationId });
+                
+                if (!medHasBarcode?.codigo_barras) {
+                  await execute(`
+                    UPDATE medications 
+                    SET codigo_barras = @barcode, fecha_actualizacion = @updatedAt
+                    WHERE id = @id
+                  `, { id: actualMedicationId, barcode, updatedAt: now });
+                  console.log(`[SeparateEntryService] ✓ Código de barras agregado al medicamento existente`);
+                }
+              }
+            }
+          } else {
+            // No existe: crear un nuevo medicamento
+            console.log(`[SeparateEntryService] Creando nuevo medicamento: ${medicationName}, barcode: ${barcode || 'sin código'}, fecha: ${fechaCaducidad || 'sin fecha'}`);
+            const newMedication = await medicationService.createMedication({
+              name: medicationName,
+              qty: 0, // Se actualizará después con la cantidad de la entrada
+              unit: medicationUnit,
+              expiresAt: fechaCaducidad || new Date().toISOString(),
+              barcode: barcode || undefined,
+              createdBy: data.userId
+            });
+            actualMedicationId = newMedication.id;
+            console.log(`[SeparateEntryService] ✓ Medicamento creado con ID: ${actualMedicationId}`);
+          }
+        }
+        
+        // Obtener nombre y unidad para guardar (siempre guardar para mantener historial)
+        let medicationNameToSave = medicationName;
+        let unitToSave = medicationUnit;
+        
+        // Si no se proporcionó medicationName pero el medicamento existe, obtenerlo de la tabla medications
+        if (!medicationNameToSave && actualMedicationId) {
+          const medInfo = await queryOne<{ nombre: string; unidad: string }>(`
+            SELECT nombre, unidad FROM medications WHERE id = @id
+          `, { id: actualMedicationId });
+          if (medInfo) {
+            medicationNameToSave = medInfo.nombre;
+            unitToSave = medInfo.unidad || unitToSave;
+          }
+        }
+        
+        // Log para depuración
+        console.log('[SeparateEntryService] Guardando item de entrada:', {
+          medicationId: actualMedicationId,
+          medicationName: medicationNameToSave,
+          unit: unitToSave,
+          qty: item.qty,
+          fechaCaducidad: fechaCaducidad
         });
+        
+        try {
+          // Intentar insertar con nombre_medicamento, unidad y fecha_caducidad
+          await execute(`
+            INSERT INTO entrada_items (id, entrada_id, medicamento_id, cantidad, nombre_medicamento, unidad, fecha_caducidad)
+            VALUES (@itemId, @entradaId, @medicationId, @qty, @medicationName, @unit, @fechaCaducidad)
+          `, {
+            itemId: uuidv4(),
+            entradaId: id,
+            medicationId: actualMedicationId,
+            qty: item.qty,
+            medicationName: medicationNameToSave || null,
+            unit: unitToSave || null,
+            fechaCaducidad: fechaCaducidad || null
+          });
+          console.log('[SeparateEntryService] ✓ Item insertado correctamente');
+        } catch (error: any) {
+          // Si falla por columnas faltantes, insertar sin ellas
+          if (error.message && (error.message.includes('nombre_medicamento') || error.message.includes('unidad') || error.message.includes('fecha_caducidad') || error.message.includes('Invalid column name'))) {
+            console.warn('⚠️ Columnas nombre_medicamento, unidad o fecha_caducidad no existen en entrada_items. Insertando sin ellas.');
+            await execute(`
+              INSERT INTO entrada_items (id, entrada_id, medicamento_id, cantidad)
+              VALUES (@itemId, @entradaId, @medicationId, @qty)
+            `, {
+              itemId: uuidv4(),
+              entradaId: id,
+              medicationId: actualMedicationId,
+              qty: item.qty
+            });
+          } else {
+            throw error;
+          }
+        }
 
         // Aumentar cantidad del medicamento
         await execute(`
           UPDATE medications
           SET cantidad = cantidad + @qty, fecha_actualizacion = @updatedAt
           WHERE id = @medicationId
-        `, { medicationId: item.medicationId, qty: item.qty, updatedAt: now });
+        `, { medicationId: actualMedicationId, qty: item.qty, updatedAt: now });
       }
     } else if (data.type === 'salida') {
       // Validar que tenga paciente

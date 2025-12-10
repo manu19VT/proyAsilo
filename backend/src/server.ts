@@ -11,6 +11,7 @@ import personalObjectsRouter from './routes/personalObjects';
 import usersRouter from './routes/users';
 import authRouter from './routes/auth';
 import patientMedicationsRouter from './routes/patientMedications';
+import customRolesRouter from './routes/customRoles';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -41,6 +42,7 @@ app.use('/api/personal-objects', personalObjectsRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/patient-medications', patientMedicationsRouter);
+app.use('/api/custom-roles', customRolesRouter);
 
 // Ruta de salud/health check
 app.get('/api/health', (req, res) => {

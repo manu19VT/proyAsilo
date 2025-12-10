@@ -38,3 +38,5 @@ SELECT TOP 10 * FROM entry_requests ORDER BY fecha_creacion DESC;
 -- Ver medicamentos
 SELECT TOP 10 * FROM medications ORDER BY fecha_creacion DESC;
 
+
+

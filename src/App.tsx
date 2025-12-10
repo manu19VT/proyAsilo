@@ -24,39 +24,51 @@ function AnimatedRoutes() {
             <Dashboard />
           </ProtectedRoute>
         } />
+        <Route path="/dashboard" element={
+          <ProtectedRoute allowUnauthenticated={true}>
+            <Dashboard />
+          </ProtectedRoute>
+        } />
         
-        {/* Rutas protegidas - solo para usuarios autenticados con roles admin, nurse o doctor */}
-        <Route path="/pacientes" element={
-          <ProtectedRoute>
+        {/* Rutas protegidas - requieren permisos específicos o roles predeterminados */}
+        <Route path="/patients" element={
+          <ProtectedRoute requiredPermission="pacientes">
             <PatientsPage />
           </ProtectedRoute>
         } />
-        <Route path="/medicamentos" element={
-          <ProtectedRoute>
+        <Route path="/meds" element={
+          <ProtectedRoute requiredPermission="medicamentos">
             <MedsPage />
           </ProtectedRoute>
         } />
-        <Route path="/entradas" element={
-          <ProtectedRoute>
+        <Route path="/entries" element={
+          <ProtectedRoute requiredPermission="control_es">
             <EntriesPage />
           </ProtectedRoute>
         } />
-        <Route path="/objetos" element={
-          <ProtectedRoute>
+        <Route path="/objects" element={
+          <ProtectedRoute requiredPermission="objetos">
             <ObjectsPage />
           </ProtectedRoute>
         } />
-        <Route path="/usuarios" element={
-          <ProtectedRoute>
+        <Route path="/users" element={
+          <ProtectedRoute excludeRoles={["nurse"]}>
             <UsersPage />
           </ProtectedRoute>
         } />
+        
+        {/* Rutas legacy en español (redirigen a las nuevas) */}
+        <Route path="/pacientes" element={<Navigate to="/patients" replace />} />
+        <Route path="/medicamentos" element={<Navigate to="/meds" replace />} />
+        <Route path="/entradas" element={<Navigate to="/entries" replace />} />
+        <Route path="/objetos" element={<Navigate to="/objects" replace />} />
+        <Route path="/usuarios" element={<Navigate to="/users" replace />} />
         
         {/* Login */}
         <Route path="/login" element={<LoginPage />} />
         
         {/* Cualquier otra ruta redirige al dashboard */}
-        <Route path="*" element={<Navigate to="/" />} />
+        <Route path="*" element={<Navigate to="/dashboard" />} />
       </Routes>
     </AnimatePresence>
   );

@@ -13,6 +13,7 @@ import {
   ListItemIcon,
   ListItemText,
   MenuItem,
+  Menu,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -42,7 +43,7 @@ import { useAuth } from "../contexts/AuthContext";
 import ConfirmDeleteDialog from "../components/ConfirmDeleteDialog";
 
 type StatusTab = "activo" | "baja" | "todos";
-type SearchType = "nombre" | "id" | "contacto" | "curp" | "rfc";
+type FilterType = "az" | "edad_mayor" | "edad_menor" | "id" | "fecha_ingreso_mayor" | "fecha_ingreso_menor";
 
 const STATUS_TABS: { label: string; value: StatusTab }[] = [
   { label: "Activos", value: "activo" },
@@ -50,12 +51,13 @@ const STATUS_TABS: { label: string; value: StatusTab }[] = [
   { label: "Todos", value: "todos" }
 ];
 
-const SEARCH_OPTIONS: { label: string; value: SearchType }[] = [
-  { label: "Por nombre", value: "nombre" },
+const FILTER_OPTIONS: { label: string; value: FilterType }[] = [
+  { label: "A-Z (por abecedario)", value: "az" },
+  { label: "Edad (De mayor a menor)", value: "edad_mayor" },
+  { label: "Edad (De menor a mayor)", value: "edad_menor" },
   { label: "Por ID/Clave", value: "id" },
-  { label: "Por contacto", value: "contacto" },
-  { label: "Por CURP", value: "curp" },
-  { label: "Por RFC", value: "rfc" }
+  { label: "Fecha de ingreso (De mayor a menor)", value: "fecha_ingreso_mayor" },
+  { label: "Fecha de ingreso (De menor a mayor)", value: "fecha_ingreso_menor" }
 ];
 
 export default function PatientsPage() {
@@ -66,7 +68,7 @@ export default function PatientsPage() {
 
   const [statusFilter, setStatusFilter] = useState<StatusTab>("activo");
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchType, setSearchType] = useState<SearchType>("nombre");
+  const [filterType, setFilterType] = useState<FilterType>("az");
 
   const [showForm, setShowForm] = useState(false);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
@@ -105,6 +107,11 @@ export default function PatientsPage() {
   const [detailMedications, setDetailMedications] = useState<PatientMedication[]>([]);
   const [detailObjects, setDetailObjects] = useState<PersonalObject[]>([]);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    mouseX: number;
+    mouseY: number;
+    patient: Patient | null;
+  } | null>(null);
 
   const InfoLine = ({ label, value }: { label: string; value?: ReactNode }) => (
     <Typography variant="body2">
@@ -179,34 +186,75 @@ export default function PatientsPage() {
     return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString();
   };
 
-  const filterPatients = useMemo(
-    () => (data: Patient[], query: string, type: SearchType): Patient[] => {
+  // Función para buscar pacientes (independiente del filtro)
+  const searchPatients = useMemo(
+    () => (data: Patient[], query: string): Patient[] => {
       if (!query.trim()) return data;
       const q = query.toLowerCase().trim();
       return data.filter(p => {
-        switch (type) {
-          case "nombre":
-            return p.name.toLowerCase().includes(q);
-          case "id":
-            return p.id.toLowerCase().includes(q);
-          case "contacto":
-            return p.contacts.some(
+        // Buscar por ID
+        if (p.id.toLowerCase().includes(q)) return true;
+        // Buscar por nombre
+        if (p.name.toLowerCase().includes(q)) return true;
+        // Buscar por CURP
+        if (p.curp?.toLowerCase().includes(q)) return true;
+        // Buscar por contactos (nombre, teléfono)
+        if (p.contacts.some(
               c =>
                 c.name.toLowerCase().includes(q) ||
-                c.phone.includes(q) ||
-                (c.rfc && c.rfc.toLowerCase().includes(q))
-            );
-          case "curp":
-            return p.curp?.toLowerCase().includes(q) ?? false;
-          case "rfc":
-            return (
-              p.rfc?.toLowerCase().includes(q) ||
-              p.contacts.some(c => c.rfc?.toLowerCase().includes(q))
-            ) ?? false;
-          default:
-            return true;
-        }
+            c.phone.includes(q)
+        )) return true;
+        return false;
       });
+    },
+    []
+  );
+
+  // Función para ordenar/filtrar pacientes
+  const sortPatients = useMemo(
+    () => (data: Patient[], type: FilterType): Patient[] => {
+      const sorted = [...data];
+      
+      switch (type) {
+        case "az":
+          return sorted.sort((a, b) => a.name.localeCompare(b.name));
+        case "edad_mayor":
+          return sorted.sort((a, b) => {
+            const ageA = a.age ?? 0;
+            const ageB = b.age ?? 0;
+            return ageB - ageA; // Mayor a menor
+          });
+        case "edad_menor":
+          return sorted.sort((a, b) => {
+            const ageA = a.age ?? 0;
+            const ageB = b.age ?? 0;
+            return ageA - ageB; // Menor a mayor
+          });
+        case "id":
+          return sorted.sort((a, b) => {
+            // Intentar ordenar numéricamente si ambos son números
+            const numA = parseInt(a.id, 10);
+            const numB = parseInt(b.id, 10);
+            if (!isNaN(numA) && !isNaN(numB)) {
+              return numA - numB;
+            }
+            return a.id.localeCompare(b.id);
+          });
+        case "fecha_ingreso_mayor":
+          return sorted.sort((a, b) => {
+            const dateA = a.admissionDate ? new Date(a.admissionDate).getTime() : 0;
+            const dateB = b.admissionDate ? new Date(b.admissionDate).getTime() : 0;
+            return dateB - dateA; // Más reciente primero
+          });
+        case "fecha_ingreso_menor":
+          return sorted.sort((a, b) => {
+            const dateA = a.admissionDate ? new Date(a.admissionDate).getTime() : 0;
+            const dateB = b.admissionDate ? new Date(b.admissionDate).getTime() : 0;
+            return dateA - dateB; // Más antiguo primero
+          });
+          default:
+          return sorted;
+        }
     },
     []
   );
@@ -226,7 +274,16 @@ export default function PatientsPage() {
         contacts: p.contacts || []
       }));
       setItems(normalized);
-      setFilteredItems(filterPatients(normalized, searchQuery, searchType));
+      
+      // Aplicar búsqueda primero (si hay query)
+      let filtered = searchQuery.trim() 
+        ? searchPatients(normalized, searchQuery)
+        : normalized;
+      
+      // Aplicar ordenamiento/filtro
+      filtered = sortPatients(filtered, filterType);
+      
+      setFilteredItems(filtered);
     } catch (error: any) {
       console.error("Error al cargar pacientes:", error);
       const errorMessage = error?.message || "Error desconocido al cargar los pacientes";
@@ -248,8 +305,16 @@ export default function PatientsPage() {
   }, [showForm]);
 
   useEffect(() => {
-    setFilteredItems(filterPatients(items, searchQuery, searchType));
-  }, [items, searchQuery, searchType, filterPatients]);
+    // Aplicar búsqueda primero (si hay query)
+    let filtered = searchQuery.trim() 
+      ? searchPatients(items, searchQuery)
+      : items;
+    
+    // Aplicar ordenamiento/filtro
+    filtered = sortPatients(filtered, filterType);
+    
+    setFilteredItems(filtered);
+  }, [items, searchQuery, filterType, searchPatients, sortPatients]);
 
   const resetForm = () => {
     setName("");
@@ -349,6 +414,18 @@ export default function PatientsPage() {
       return;
     }
 
+    // Validar que tenga al menos un contacto
+    if (contacts.length === 0) {
+      const confirmContinue = window.confirm(
+        "⚠️ ADVERTENCIA: No has agregado ningún contacto al paciente.\n\n" +
+        "Es recomendable agregar al menos un contacto de emergencia.\n\n" +
+        "¿Deseas continuar sin agregar un contacto?"
+      );
+      if (!confirmContinue) {
+        return;
+      }
+    }
+
     // Mostrar mensaje si es enfermero (solo al crear, no al editar)
     if (user?.role === "nurse" && !editingPatient) {
       alert("Se le asignará un doctor y enfermero en un momento.");
@@ -386,6 +463,18 @@ export default function PatientsPage() {
     if (!editingPatient || !name.trim()) {
       alert("El nombre es obligatorio");
       return;
+    }
+
+    // Validar que tenga al menos un contacto
+    if (contacts.length === 0) {
+      const confirmContinue = window.confirm(
+        "⚠️ ADVERTENCIA: El paciente no tiene ningún contacto agregado.\n\n" +
+        "Es recomendable agregar al menos un contacto de emergencia.\n\n" +
+        "¿Deseas continuar sin agregar un contacto?"
+      );
+      if (!confirmContinue) {
+        return;
+      }
     }
 
     try {
@@ -506,6 +595,51 @@ export default function PatientsPage() {
     setDetailError(null);
   };
 
+  const handleRowClick = (event: React.MouseEvent, patient: Patient) => {
+    event.preventDefault();
+    setContextMenu(
+      contextMenu === null
+        ? {
+            mouseX: event.clientX + 2,
+            mouseY: event.clientY - 6,
+            patient
+          }
+        : null
+    );
+  };
+
+  const handleContextMenuClose = () => {
+    setContextMenu(null);
+  };
+
+  const handleContextMenuAction = (action: string, patient: Patient) => {
+    handleContextMenuClose();
+    
+    switch (action) {
+      case 'view':
+        openPatientDetails(patient.id);
+        break;
+      case 'edit':
+        openEditForm(patient);
+        break;
+      case 'discharge':
+        if (patient.status === 'activo') {
+          openDischargeDialog(patient);
+        }
+        break;
+      case 'delete':
+        if (user?.role === 'admin' && patient.status === 'activo') {
+          openDeleteDialog(patient);
+        }
+        break;
+      case 'reactivate':
+        if (patient.status === 'baja') {
+          handleReactivate(patient.id);
+        }
+        break;
+    }
+  };
+
   return (
     <Page>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
@@ -518,6 +652,12 @@ export default function PatientsPage() {
           {showForm ? "Cancelar" : "Nuevo Paciente"}
         </Button>
       </Stack>
+
+      <Alert severity="info" icon={<BadgeIcon />} sx={{ mb: 2 }}>
+        <Typography variant="body2" component="span">
+          <strong>Para modificar, eliminar, ver detalles o dar de baja:</strong> Haz clic en la tabla sobre el paciente para abrir el menú de opciones.
+        </Typography>
+      </Alert>
 
       <Alert severity="info" icon={<BadgeIcon />} sx={{ mb: 2 }}>
         Registra pacientes con su información completa (CURP, RFC, contactos) para un mejor seguimiento.
@@ -535,22 +675,25 @@ export default function PatientsPage() {
           ))}
         </Tabs>
 
-        <Typography variant="subtitle2" gutterBottom>Buscar paciente</Typography>
-        <Stack direction="row" spacing={2}>
+        <Stack direction="row" spacing={2} alignItems="center">
+          <Typography variant="subtitle2" sx={{ minWidth: 100 }}>Filtrar por:</Typography>
           <TextField
             select
             size="small"
-            value={searchType}
-            onChange={(e) => setSearchType(e.target.value as SearchType)}
-            sx={{ minWidth: 160 }}
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value as FilterType)}
+            sx={{ minWidth: 250 }}
           >
-            {SEARCH_OPTIONS.map(opt => (
+            {FILTER_OPTIONS.map(opt => (
               <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
             ))}
           </TextField>
+        </Stack>
 
+        <Stack direction="row" spacing={2} alignItems="center" sx={{ mt: 2 }}>
+          <Typography variant="subtitle2" sx={{ minWidth: 100 }}>Buscar:</Typography>
           <TextField
-            placeholder={`Buscar ${searchType}...`}
+            placeholder="Buscar por ID, nombre, CURP o contacto..."
             size="small"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -726,9 +869,28 @@ export default function PatientsPage() {
                           })()}
                         </Typography>
                       </Box>
+                      <Stack direction="row" spacing={1}>
+                        <Button 
+                          size="small" 
+                          variant="outlined"
+                          onClick={() => {
+                            // Cargar los datos del contacto en los campos para editar
+                            setContactName(c.name);
+                            setContactPhone(c.phone);
+                            setContactRelation(c.relation);
+                            setContactRfc(c.rfc || "");
+                            setContactAge(c.age ? String(c.age) : "");
+                            setContactAddress(c.address || "");
+                            // Eliminar el contacto de la lista (se agregará de nuevo con los cambios)
+                            removeContact(index);
+                          }}
+                        >
+                          Editar
+                        </Button>
                       <Button size="small" color="error" onClick={() => removeContact(index)}>
                         Eliminar
                       </Button>
+                      </Stack>
                     </Stack>
                   </Paper>
                 ))}
@@ -790,10 +952,23 @@ export default function PatientsPage() {
                   fullWidth
                 />
                 <Button
-                  variant="outlined"
+                  variant="contained"
                   size="small"
                   onClick={addContact}
                   disabled={!contactName.trim() || !contactPhone.trim() || !contactRelation.trim()}
+                  sx={{
+                    bgcolor: "#f97316",
+                    color: "#000",
+                    fontWeight: 600,
+                    "&:hover": {
+                      bgcolor: "#ea580c",
+                    },
+                    "&:disabled": {
+                      bgcolor: "#fbbf24",
+                      color: "#000",
+                      opacity: 0.6
+                    }
+                  }}
                 >
                   Agregar Contacto
                 </Button>
@@ -832,7 +1007,7 @@ export default function PatientsPage() {
           Cargando pacientes, por favor espere...
         </Alert>
       ) : (
-        <Table headers={["ID", "Nombre", "Edad", "CURP", "RFC", "Contactos", "Fecha Ingreso", "Estado", "Acciones"]}>
+        <Table headers={["ID", "Nombre", "Edad", "CURP", "RFC", "Contactos", "Fecha Ingreso", "Estado"]}>
         <AnimatePresence initial={false}>
           {filteredItems.map(patient => (
             <motion.tr
@@ -841,9 +1016,24 @@ export default function PatientsPage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.25 }}
+              onClick={(e) => handleRowClick(e, patient)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                handleRowClick(e, patient);
+              }}
+              style={{ 
+                cursor: 'pointer',
+                userSelect: 'none'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#f5f5f5';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '';
+              }}
             >
               <td style={{ padding: 8, fontSize: 11, fontFamily: "monospace" }}>
-                {patient.id.slice(0, 8)}
+                {patient.id}
               </td>
               <td style={{ padding: 8, fontWeight: 600 }}>{patient.name}</td>
               <td style={{ padding: 8 }}>{patient.age ?? "-"}</td>
@@ -874,60 +1064,6 @@ export default function PatientsPage() {
                   size="small"
                 />
               </td>
-              <td style={{ padding: 8 }}>
-                <Stack spacing={1}>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    onClick={() => openPatientDetails(patient.id)}
-                  >
-                    Ver detalles
-                  </Button>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="primary"
-                    startIcon={<EditIcon />}
-                    onClick={() => openEditForm(patient)}
-                  >
-                    Editar
-                  </Button>
-                  {patient.status === "activo" ? (
-                    <>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        color="error"
-                        startIcon={<PersonOffIcon />}
-                        onClick={() => openDischargeDialog(patient)}
-                      >
-                        Dar de baja
-                      </Button>
-                      {user?.role === "admin" && (
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          color="error"
-                          startIcon={<DeleteIcon />}
-                          onClick={() => openDeleteDialog(patient)}
-                        >
-                          Eliminar
-                        </Button>
-                      )}
-                    </>
-                  ) : (
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      color="success"
-                      startIcon={<RestoreIcon />}
-                      onClick={() => handleReactivate(patient.id)}
-                    >
-                      Reactivar
-                    </Button>
-                  )}
-                </Stack>
-              </td>
             </motion.tr>
           ))}
         </AnimatePresence>
@@ -946,7 +1082,23 @@ export default function PatientsPage() {
         maxWidth="md"
         fullWidth
       >
-        <DialogTitle>Detalles del paciente</DialogTitle>
+        <DialogTitle>
+          <Stack direction="row" justifyContent="space-between" alignItems="center">
+            <Typography variant="h6" fontWeight={600}>Detalles del paciente</Typography>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={closeDetailDialog}
+              sx={{
+                minWidth: 100,
+                fontWeight: 600,
+                boxShadow: 2
+              }}
+            >
+              Cerrar
+            </Button>
+          </Stack>
+        </DialogTitle>
         <DialogContent dividers>
           {detailLoading ? (
             <Stack alignItems="center" justifyContent="center" spacing={2} sx={{ py: 4 }}>
@@ -1208,9 +1360,6 @@ export default function PatientsPage() {
             <Typography variant="body2">Selecciona un paciente para ver sus detalles.</Typography>
           )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={closeDetailDialog}>Cerrar</Button>
-        </DialogActions>
       </Dialog>
 
       {/* Diálogo de confirmación para eliminar */}
@@ -1233,6 +1382,60 @@ export default function PatientsPage() {
         ] : []}
         loading={deleteLoading}
       />
+
+      {/* Menú contextual para acciones del paciente */}
+      <Menu
+        open={contextMenu !== null}
+        onClose={handleContextMenuClose}
+        anchorReference="anchorPosition"
+        anchorPosition={
+          contextMenu !== null
+            ? { top: contextMenu.mouseY, left: contextMenu.mouseX }
+            : undefined
+        }
+      >
+        {contextMenu?.patient && (
+          <>
+            <MenuItem onClick={() => handleContextMenuAction('view', contextMenu.patient!)}>
+              <ListItemIcon>
+                <BadgeIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>Ver detalles</ListItemText>
+            </MenuItem>
+            <MenuItem onClick={() => handleContextMenuAction('edit', contextMenu.patient!)}>
+              <ListItemIcon>
+                <EditIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>Editar</ListItemText>
+            </MenuItem>
+            {contextMenu.patient.status === "activo" ? (
+              <>
+                <MenuItem onClick={() => handleContextMenuAction('discharge', contextMenu.patient!)}>
+                  <ListItemIcon>
+                    <PersonOffIcon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText>Dar de baja</ListItemText>
+                </MenuItem>
+                {user?.role === "admin" && (
+                  <MenuItem onClick={() => handleContextMenuAction('delete', contextMenu.patient!)}>
+                    <ListItemIcon>
+                      <DeleteIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Eliminar</ListItemText>
+                  </MenuItem>
+                )}
+              </>
+            ) : (
+              <MenuItem onClick={() => handleContextMenuAction('reactivate', contextMenu.patient!)}>
+                <ListItemIcon>
+                  <RestoreIcon fontSize="small" />
+                </ListItemIcon>
+                <ListItemText>Reactivar</ListItemText>
+              </MenuItem>
+            )}
+          </>
+        )}
+      </Menu>
 
       <Dialog
         open={dischargeDialog}

@@ -80,6 +80,10 @@ export interface EntryItem {
   frecuencia?: string;
   /** Para salidas y caducidad: fecha de caducidad del medicamento */
   fechaCaducidad?: string; // ISO
+  /** Para entradas: nombre del medicamento cuando es nuevo (no registrado) */
+  medicationName?: string;
+  /** Para entradas: unidad del medicamento */
+  unit?: string;
 }
 
 export interface EntryRequest {
@@ -108,7 +112,7 @@ export interface PersonalObject {
 export interface User {
   id: ID;
   name: string;
-  role: "admin" | "nurse" | "doctor" | "usuario" | "reception";
+  role: "admin" | "nurse" | "doctor" | "usuario" | "reception" | string; // string permite roles personalizados
   email?: string;
   createdAt?: string;
   age?: number;
@@ -116,4 +120,5 @@ export interface User {
   password?: string; // temporal, se enviará por correo
   passwordChangeRequired?: boolean; // si debe cambiar contraseña
   lastLogin?: string;
+  customRoleId?: string; // ID del rol personalizado si aplica
 }

@@ -107,3 +107,5 @@ PRINT 'La tabla entradas NO debe tener columna paciente_id';
 PRINT '========================================';
 GO
 
+
+

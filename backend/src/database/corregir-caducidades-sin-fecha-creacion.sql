@@ -90,3 +90,5 @@ PRINT 'La fecha de caducidad se obtiene del medicamento (medications.fecha_venci
 PRINT '========================================';
 
 
+
+

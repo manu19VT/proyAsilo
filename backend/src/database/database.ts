@@ -213,4 +213,22 @@ export async function execute(commandText: string, params?: Record<string, any>)
   return result.rowsAffected[0];
 }
 
-export default { getDatabase, initDatabase, closeDatabase, query, queryOne, execute };
+// Función helper para ejecutar código dentro de una transacción
+export async function withTransaction<T>(
+  callback: (transaction: sql.Transaction) => Promise<T>
+): Promise<T> {
+  const pool = await getDatabase();
+  const transaction = new sql.Transaction(pool);
+  
+  try {
+    await transaction.begin();
+    const result = await callback(transaction);
+    await transaction.commit();
+    return result;
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+}
+
+export default { getDatabase, initDatabase, closeDatabase, query, queryOne, execute, withTransaction };
