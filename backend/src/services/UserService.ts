@@ -324,8 +324,12 @@ export class UserService {
           const usersEliminadoPorResult = await request.query('UPDATE users SET eliminado_por = NULL WHERE eliminado_por = @id');
           console.log(`Actualizado users.eliminado_por, filas afectadas: ${usersEliminadoPorResult.rowsAffected[0]}`);
         } catch (e: any) {
-          if (!e.message?.includes('Invalid column name')) {
+          // Ignorar errores de columna no existente, pero no abortar la transacción
+          if (e.message?.includes('Invalid column name')) {
+            console.log(`Columna users.eliminado_por no existe, omitiendo...`);
+          } else {
             console.warn(`Advertencia al limpiar users.eliminado_por: ${e.message}`);
+            // No lanzar el error para no abortar la transacción
           }
         }
         
@@ -334,8 +338,12 @@ export class UserService {
           const auditLogResult = await request.query('DELETE FROM audit_log WHERE usuario_id = @id');
           console.log(`Eliminados registros de audit_log, filas afectadas: ${auditLogResult.rowsAffected[0]}`);
         } catch (e: any) {
-          if (!e.message?.includes('Invalid object name')) {
+          // Ignorar errores de tabla no existente, pero no abortar la transacción
+          if (e.message?.includes('Invalid object name')) {
+            console.log(`Tabla audit_log no existe, omitiendo...`);
+          } else {
             console.warn(`Advertencia al limpiar audit_log: ${e.message}`);
+            // No lanzar el error para no abortar la transacción
           }
         }
         
@@ -352,14 +360,26 @@ export class UserService {
           const eliminadoPorResult = await request.query('UPDATE patients SET eliminado_por = NULL WHERE eliminado_por = @id');
           console.log(`Actualizado patients.eliminado_por, filas afectadas: ${eliminadoPorResult.rowsAffected[0]}`);
         } catch (e: any) {
-          if (!e.message?.includes('Invalid column name')) {
+          // Ignorar errores de columna no existente, pero no abortar la transacción
+          if (e.message?.includes('Invalid column name')) {
+            console.log(`Columna patients.eliminado_por no existe, omitiendo...`);
+          } else {
             console.warn(`Advertencia al limpiar patients.eliminado_por: ${e.message}`);
+            // No lanzar el error para no abortar la transacción
           }
         }
         
         for (const updateQuery of patientsUpdates) {
-          const result = await request.query(updateQuery);
-          console.log(`Actualizado: ${updateQuery}, filas afectadas: ${result.rowsAffected[0]}`);
+          try {
+            const result = await request.query(updateQuery);
+            console.log(`Actualizado: ${updateQuery}, filas afectadas: ${result.rowsAffected[0]}`);
+          } catch (e: any) {
+            // Ignorar errores de columna no existente, pero registrar otros errores
+            if (!e.message?.includes('Invalid column name')) {
+              console.warn(`Error al ejecutar ${updateQuery}: ${e.message}`);
+              // No lanzar el error para no abortar la transacción
+            }
+          }
         }
         
         // Tabla medications
@@ -369,13 +389,29 @@ export class UserService {
         ];
         
         for (const updateQuery of medicationsUpdates) {
-          const result = await request.query(updateQuery);
-          console.log(`Actualizado: ${updateQuery}, filas afectadas: ${result.rowsAffected[0]}`);
+          try {
+            const result = await request.query(updateQuery);
+            console.log(`Actualizado: ${updateQuery}, filas afectadas: ${result.rowsAffected[0]}`);
+          } catch (e: any) {
+            // Ignorar errores de columna no existente, pero registrar otros errores
+            if (!e.message?.includes('Invalid column name')) {
+              console.warn(`Error al ejecutar ${updateQuery}: ${e.message}`);
+              // No lanzar el error para no abortar la transacción
+            }
+          }
         }
         
         // Tabla patient_medications
-        const pmResult = await request.query('UPDATE patient_medications SET prescrito_por = NULL WHERE prescrito_por = @id');
-        console.log(`Actualizado patient_medications, filas afectadas: ${pmResult.rowsAffected[0]}`);
+        try {
+          const pmResult = await request.query('UPDATE patient_medications SET prescrito_por = NULL WHERE prescrito_por = @id');
+          console.log(`Actualizado patient_medications, filas afectadas: ${pmResult.rowsAffected[0]}`);
+        } catch (e: any) {
+          // Ignorar errores de columna no existente, pero registrar otros errores
+          if (!e.message?.includes('Invalid column name') && !e.message?.includes('Invalid object name')) {
+            console.warn(`Error al actualizar patient_medications: ${e.message}`);
+            // No lanzar el error para no abortar la transacción
+          }
+        }
         
         // Limpiar referencias en otras tablas si existen
         const otherTables = [
@@ -398,8 +434,10 @@ export class UserService {
             const result = await request.query(updateQuery);
             console.log(`Actualizado ${tableInfo.table}.${tableInfo.column}, filas afectadas: ${result.rowsAffected[0]}`);
           } catch (e: any) {
-            if (!e.message?.includes('Invalid object name')) {
+            // Ignorar errores de tabla/columna no existente, pero no abortar la transacción
+            if (!e.message?.includes('Invalid object name') && !e.message?.includes('Invalid column name')) {
               console.warn(`Advertencia al limpiar ${tableInfo.table}.${tableInfo.column}: ${e.message}`);
+              // No lanzar el error para no abortar la transacción
             }
           }
         }
