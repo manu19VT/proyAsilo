@@ -500,10 +500,18 @@ export class UserService {
                 throw new Error(`Aún existen ${count} referencia(s) en ${tableInfo.table}.${column} al usuario ${id}`);
               }
             } catch (e: any) {
-              if (!e.message?.includes('Invalid object name') && !e.message?.includes('Invalid column name') && !e.message?.includes('Aún existen')) {
-                // Ignorar errores de tabla/columna no existente
-              } else if (e.message?.includes('Aún existen')) {
+              // Si es un error de "Aún existen", lanzarlo para abortar la transacción
+              if (e.message?.includes('Aún existen')) {
                 throw e;
+              }
+              // Ignorar errores de tabla/columna no existente, pero no abortar la transacción
+              if (e.message?.includes('Invalid object name') || e.message?.includes('Invalid column name')) {
+                console.log(`Tabla/columna ${tableInfo.table}.${column} no existe, omitiendo verificación...`);
+                // Continuar sin abortar la transacción
+              } else {
+                // Otros errores: registrar pero no abortar la transacción
+                console.warn(`Advertencia al verificar ${tableInfo.table}.${column}: ${e.message}`);
+                // No lanzar el error para no abortar la transacción
               }
             }
           }
