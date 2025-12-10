@@ -1,6 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
 import { Patient, Contact, ID } from '../types';
-import { query } from '../database/database';
 import { query, queryOne, execute } from '../database/database';
 
 interface PatientFilters {

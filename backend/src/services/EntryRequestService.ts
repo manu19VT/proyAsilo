@@ -85,7 +85,7 @@ export class EntryRequestService {
     
     // Si hay muchos IDs, dividir en lotes para evitar problemas de rendimiento
     const BATCH_SIZE = 100;
-    const itemsMap = new Map<string, { medicationId: ID; qty: number; dosisRecomendada?: string; frecuencia?: string; fechaCaducidad?: string }[]>();
+    const itemsMap = new Map<string, { medicationId: ID; qty: number; dosisRecomendada?: string; frecuencia?: string; fechaCaducidad?: string; medicationName?: string; unit?: string }[]>();
     
     // Inicializar el mapa con arrays vacíos para todas las entradas
     entryIds.forEach(id => {

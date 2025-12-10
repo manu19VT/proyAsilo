@@ -105,6 +105,7 @@ export interface User {
   birthDate?: string;
   password?: string;
   passwordChangeRequired?: boolean;
+  customRoleId?: string;
 }
 
 
