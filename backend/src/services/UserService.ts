@@ -560,6 +560,15 @@ export class UserService {
         }
         console.log(`Usuario antes del DELETE:`, beforeDeleteUser);
         
+        // Verificar que la transacción sigue activa antes de continuar
+        try {
+          const testQuery = await request.query('SELECT 1 as test');
+          console.log('✓ Transacción sigue activa antes del DELETE');
+        } catch (testError: any) {
+          console.error(`ERROR: La transacción ya no está activa antes del DELETE: ${testError.message}`);
+          throw new Error(`La transacción se abortó antes del DELETE: ${testError.message}`);
+        }
+        
         // Deshabilitar el trigger temporalmente para permitir hard delete
         console.log('Deshabilitando trigger TRG_users_before_delete...');
         try {
@@ -567,6 +576,19 @@ export class UserService {
           console.log('✓ Trigger deshabilitado');
         } catch (e: any) {
           console.warn(`No se pudo deshabilitar el trigger (puede que no exista): ${e.message}`);
+          // Si el error es grave, podría haber abortado la transacción
+          if (e.code === 'EABORT' || e.message?.includes('Transaction has been aborted')) {
+            throw new Error(`La transacción se abortó al intentar deshabilitar el trigger: ${e.message}`);
+          }
+        }
+        
+        // Verificar nuevamente que la transacción sigue activa
+        try {
+          const testQuery2 = await request.query('SELECT 1 as test');
+          console.log('✓ Transacción sigue activa después de deshabilitar trigger');
+        } catch (testError2: any) {
+          console.error(`ERROR: La transacción ya no está activa después de deshabilitar trigger: ${testError2.message}`);
+          throw new Error(`La transacción se abortó después de deshabilitar el trigger: ${testError2.message}`);
         }
         
         // Eliminar el usuario
