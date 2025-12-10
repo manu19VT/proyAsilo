@@ -1,5 +1,6 @@
 import express from 'express';
 import { entryRequestService } from '../services/EntryRequestService';
+import { separateEntryService } from '../services/SeparateEntryService';
 import { mockService } from '../services/MockService';
 import { isMockMode } from '../utils/mockMode';
 
@@ -12,14 +13,15 @@ router.get('/', async (req, res) => {
     
     if (isMockMode()) {
       const entryRequests = mockService.listEntryRequests({
-        type: type === 'entrada' || type === 'salida' ? type : undefined,
+        type: type === 'entrada' || type === 'salida' || type === 'caducidad' ? type : undefined,
         patientId: patientId || undefined
       });
       return res.json(entryRequests);
     }
     
-    const entryRequests = await entryRequestService.listEntryRequests({
-      type: type === 'entrada' || type === 'salida' ? type : undefined,
+    // Usar el nuevo servicio con tablas separadas
+    const entryRequests = await separateEntryService.listEntryRequests({
+      type: type === 'entrada' || type === 'salida' || type === 'caducidad' ? type as any : undefined,
       patientId: patientId || undefined
     });
     res.json(entryRequests);
@@ -38,7 +40,7 @@ router.get('/folio/:folio', async (req, res) => {
       return res.json(entryRequest);
     }
     
-    const entryRequest = await entryRequestService.getEntryRequestByFolio(req.params.folio);
+    const entryRequest = await separateEntryService.getEntryRequestByFolio(req.params.folio);
     if (!entryRequest) {
       return res.status(404).json({ error: 'Solicitud no encontrada' });
     }
@@ -59,7 +61,7 @@ router.get('/:id', async (req, res) => {
       return res.json(entryRequest);
     }
     
-    const entryRequest = await entryRequestService.getEntryRequestById(req.params.id);
+    const entryRequest = await separateEntryService.getEntryRequestById(req.params.id);
     if (!entryRequest) {
       return res.status(404).json({ error: 'Solicitud no encontrada' });
     }
@@ -72,13 +74,44 @@ router.get('/:id', async (req, res) => {
 // Crear solicitud
 router.post('/', async (req, res) => {
   try {
-    const { type, patientId, items, status, dueDate, userId } = req.body || {};
-    if (!type || (type !== 'entrada' && type !== 'salida')) {
-      return res.status(400).json({ error: 'type debe ser "entrada" o "salida"' });
+    const { type, patientId, items, status, dueDate, userId, comment } = req.body || {};
+    
+    // Log para depuración
+    console.log('POST /entry-requests - Datos recibidos:', {
+      type,
+      hasPatientId: !!patientId,
+      patientId: patientId ? 'presente' : 'ausente',
+      itemsCount: items?.length || 0
+    });
+    
+    // Validar tipo
+    if (!type) {
+      return res.status(400).json({ error: 'type es requerido' });
     }
-    if (!patientId) {
-      return res.status(400).json({ error: 'patientId es requerido' });
+    
+    const validTypes = ['entrada', 'salida', 'caducidad'];
+    if (!validTypes.includes(type)) {
+      return res.status(400).json({ error: `type debe ser uno de: ${validTypes.join(', ')}` });
     }
+    
+    // Para entradas y caducidad, NO se requiere patientId. Solo para salidas.
+    // IMPORTANTE: Esta validación solo aplica a salidas
+    if (type === 'salida') {
+      if (!patientId || (typeof patientId === 'string' && patientId.trim() === '')) {
+        return res.status(400).json({ error: 'patientId es requerido para salidas' });
+      }
+    }
+    
+    // Para entrada y caducidad, asegurarse de que patientId no se envíe
+    // Esto es crítico: NO enviar patientId para entrada o caducidad
+    const finalPatientId = (type === 'entrada' || type === 'caducidad') ? undefined : (patientId || undefined);
+    
+    console.log('POST /entry-requests - Después de validación:', {
+      type,
+      finalPatientId: finalPatientId ? 'presente' : 'undefined',
+      willRequirePatient: type === 'salida'
+    });
+    
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Debe incluir al menos un item' });
     }
@@ -86,7 +119,7 @@ router.post('/', async (req, res) => {
     if (isMockMode()) {
       const entryRequest = mockService.addEntryRequest({
         type,
-        patientId,
+        patientId: finalPatientId,
         items,
         status: status || 'completa',
         dueDate,
@@ -94,17 +127,20 @@ router.post('/', async (req, res) => {
       return res.status(201).json(entryRequest);
     }
 
-    const entryRequest = await entryRequestService.createEntryRequest({
+    const entryRequest = await separateEntryService.createEntryRequest({
       type,
-      patientId,
+      patientId: finalPatientId,
       items,
       status: status || 'completa',
       dueDate,
-      userId
+      userId,
+      comment
     });
     res.status(201).json(entryRequest);
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    console.error('Error al crear entrada:', error);
+    console.error('Stack trace:', error.stack);
+    res.status(400).json({ error: error.message || 'Error al registrar el movimiento' });
   }
 });
 
@@ -119,7 +155,7 @@ router.put('/:id', async (req, res) => {
       return res.json(entryRequest);
     }
     
-    const entryRequest = await entryRequestService.updateEntryRequest(req.params.id, req.body);
+    const entryRequest = await separateEntryService.updateEntryRequest(req.params.id, req.body);
     if (!entryRequest) {
       return res.status(404).json({ error: 'Solicitud no encontrada' });
     }
@@ -140,7 +176,7 @@ router.delete('/:id', async (req, res) => {
       return res.json({ message: 'Solicitud eliminada correctamente' });
     }
     
-    const deleted = await entryRequestService.deleteEntryRequest(req.params.id);
+    const deleted = await separateEntryService.deleteEntryRequest(req.params.id);
     if (!deleted) {
       return res.status(404).json({ error: 'Solicitud no encontrada' });
     }

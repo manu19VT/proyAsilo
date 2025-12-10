@@ -111,6 +111,7 @@ export default function EntriesPage() {
     setItemFrecuencia("");
     setSearchMedQuery("");
     setShowForm(false);
+    setDueDateError(null);
   };
 
   const getMedById = useMemo(
@@ -197,20 +198,45 @@ export default function EntriesPage() {
         patientId: entryType === "entrada" ? patientId || "" : patientId, // no tocamos lógica backend
         items: selectedItems,
         status: "completa",
-        dueDate: entryType === "salida" && dueDate ? new Date(dueDate).toISOString() : undefined,
         comment: comment.trim() || undefined,
         userId: user?.id
-      } as any;
+      };
+      
+      // IMPORTANTE: Solo agregar patientId para salidas
+      // Para entrada y caducidad, NO incluir patientId en absoluto
+      if (entryType === "salida") {
+        if (!patientId) {
+          alert("Selecciona un paciente para la salida");
+          return;
+        }
+        payload.patientId = patientId;
+        if (dueDate) {
+          payload.dueDate = new Date(dueDate).toISOString();
+        }
+      }
+      // Para entrada y caducidad, explícitamente NO incluir patientId
+      // Esto asegura que el backend no lo requiera
 
-      await api.addEntry(payload);
+      console.log('Enviando payload:', { 
+        type: payload.type, 
+        hasPatientId: 'patientId' in payload,
+        patientId: payload.patientId 
+      });
+
+      const createdEntry = await api.addEntry(payload);
+      const entryTypeName = entryType === "entrada" ? "Entrada" : entryType === "salida" ? "Salida" : "Caducidad";
       alert(
-        `${entryType === "entrada" ? "Entrada" : entryType === "salida" ? "Salida" : "Caducidad"} registrada correctamente`
+        `${entryTypeName} registrada correctamente.\n\nFolio: ${createdEntry.folio}\n\nSe abrirá el folio para imprimir.`
       );
+      
+      // Mostrar el folio para imprimir
+      setPrintEntry(createdEntry);
       resetForm();
       load();
-    } catch (error) {
-      console.error(error);
-      alert("Error al registrar el movimiento");
+    } catch (error: any) {
+      console.error("Error completo:", error);
+      const errorMessage = error?.message || error?.error || "Error desconocido al registrar el movimiento";
+      alert(`Error al registrar el movimiento: ${errorMessage}`);
     }
   };
 
@@ -506,7 +532,7 @@ export default function EntriesPage() {
               <Button
                 variant="contained"
                 onClick={handleCreateEntry}
-                disabled={(entryType !== "entrada" && !patientId) || selectedItems.length === 0}
+                disabled={(entryType === "salida" && !patientId) || selectedItems.length === 0}
                 fullWidth
               >
                 Guardar Registro
@@ -542,9 +568,12 @@ export default function EntriesPage() {
                   <Chip label="Caducidad" color="error" size="small" icon={<WarningIcon />} />
                 )}
               </td>
+                    {/* Mostrar Paciente solo para salidas o cuando el filtro es "todos" */}
+                    {(typeFilter === "salida" || typeFilter === "todos") && (
               <td style={{ padding: 8, fontWeight: 600 }}>
-                {getPatientName(entry.patientId)}
+                        {entry.type === "salida" ? getPatientName(entry.patientId) : "-"}
               </td>
+                    )}
               <td style={{ padding: 8 }}>
                 <Stack spacing={0.5}>
                   {entry.items.slice(0, 2).map((item, index) => (
@@ -561,10 +590,24 @@ export default function EntriesPage() {
               </td>
               <td style={{ padding: 8, fontWeight: 600 }}>
                 {getTotalItems(entry)} items
+                    </td>
+                    {/* Para caducidad, mostrar fecha de caducidad del medicamento y fecha de registro */}
+                    {typeFilter === "caducidad" ? (
+                      <>
+                        <td style={{ padding: 8, fontSize: 12 }}>
+                          {entry.items.length > 0 && entry.items[0].fechaCaducidad
+                            ? new Date(entry.items[0].fechaCaducidad).toLocaleDateString()
+                            : "-"}
               </td>
               <td style={{ padding: 8, fontSize: 12 }}>
                 {new Date(entry.createdAt).toLocaleDateString()}
               </td>
+                      </>
+                    ) : (
+                      <td style={{ padding: 8, fontSize: 12 }}>
+                        {new Date(entry.createdAt).toLocaleDateString()}
+                      </td>
+                    )}
               <td style={{ padding: 8 }}>
                 <Chip
                   label={entry.status === "completa" ? "Completa" : "Incompleta"}
@@ -623,9 +666,11 @@ export default function EntriesPage() {
 
               <Box sx={{ my: 3, p: 2, border: "1px solid #ccc", borderRadius: 1 }}>
                 <Stack spacing={1}>
+                  {printEntry.type !== "caducidad" && printEntry.type !== "entrada" && (
                   <Typography variant="body1">
                     <strong>Paciente:</strong> {getPatientName(printEntry.patientId)}
                   </Typography>
+                  )}
                   <Typography variant="body1">
                     <strong>Fecha:</strong> {new Date(printEntry.createdAt).toLocaleString()}
                   </Typography>
@@ -720,7 +765,7 @@ export default function EntriesPage() {
                   <h1 style="text-align: center;">${entryTitle(printEntry.type as any)}</h1>
                   <h2 style="text-align: center; color: #f97316;">Folio: ${printEntry.folio}</h2>
                   <div style="margin: 24px 0; padding: 16px; border: 1px solid #ccc; border-radius: 8px;">
-                    <p><strong>Paciente:</strong> ${getPatientName(printEntry.patientId)}</p>
+                    ${printEntry.type !== "caducidad" && printEntry.type !== "entrada" ? `<p><strong>Paciente:</strong> ${getPatientName(printEntry.patientId)}</p>` : ""}
                     <p><strong>Fecha:</strong> ${new Date(printEntry.createdAt).toLocaleString()}</p>
                     <p><strong>Estado:</strong> ${printEntry.status === "completa" ? "Completa" : "Incompleta"}</p>
                     ${printEntry.dueDate ? `<p><strong>Próxima fecha:</strong> ${new Date(printEntry.dueDate).toLocaleDateString()}</p>` : ""}

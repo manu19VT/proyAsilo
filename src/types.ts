@@ -86,7 +86,7 @@ export interface EntryRequest {
   id: ID;
   folio: string; // folio único para control (E-YYYY-####, S-YYYY-####, C-YYYY-####)
   type: EntryType; // "entrada" | "salida" | "caducidad"
-  patientId: ID;
+  patientId?: ID; // Opcional: solo requerido para salidas
   createdAt: string;
   items: EntryItem[];
   status: "completa" | "incompleta";
