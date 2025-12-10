@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   TextField,
   Button,
@@ -21,8 +21,7 @@ import {
   Delete as DeleteIcon,
   LocalShipping as ShippingIcon,
   Inventory as InventoryIcon,
-  WarningAmber as WarningIcon,
-  QrCodeScanner as QrCodeScannerIcon
+  WarningAmber as WarningIcon
 } from "@mui/icons-material";
 import { AnimatePresence, motion } from "framer-motion";
 import Page from "../components/Page";
@@ -42,56 +41,12 @@ interface SelectedItem {
   fechaCaducidad?: string;
 }
 
-type NewMedDraft = {
-  name: string;
-  unit?: string;
-  dosage?: string;
-  expiresAt: string;
-  barcode?: string;
-};
-
-// Para entradas, no se requiere paciente
-
-// Función para validar la fecha de retorno
-const validateDueDate = (dueDate: string, selectedItems: SelectedItem[]): string | null => {
-  if (!dueDate) return null;
-  
-  const due = new Date(dueDate);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  
-  if (due < today) {
-    return "La fecha no puede ser anterior a hoy";
-  }
-  
-  // Validar que la fecha no sea posterior a la caducidad más temprana
-  if (selectedItems.length > 0) {
-    const expiryDates = selectedItems
-      .map(item => item.fechaCaducidad)
-      .filter((date): date is string => !!date)
-      .map(date => new Date(date));
-    
-    if (expiryDates.length > 0) {
-      const minExpiry = new Date(Math.min(...expiryDates.map(d => d.getTime())));
-      minExpiry.setHours(0, 0, 0, 0);
-      
-      if (due >= minExpiry) {
-        return `La fecha no puede ser posterior o igual a la fecha de caducidad más temprana (${minExpiry.toLocaleDateString()})`;
-      }
-    }
-  }
-  
-  return null;
-};
-
 export default function EntriesPage() {
   const { user } = useAuth();
   const [entries, setEntries] = useState<EntryRequest[]>([]);
   const [filteredEntries, setFilteredEntries] = useState<EntryRequest[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [medications, setMedications] = useState<Medication[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("todos");
   const [searchFolio, setSearchFolio] = useState("");
@@ -107,26 +62,13 @@ export default function EntriesPage() {
   const [itemQty, setItemQty] = useState("");
   const [itemDosis, setItemDosis] = useState("");
   const [itemFrecuencia, setItemFrecuencia] = useState("");
-  const [dueDateError, setDueDateError] = useState<string | null>(null);
-
-  // Subform ENTRADA (nuevo med)
-  const [nmBarcode, setNmBarcode] = useState("");
-  const [nmName, setNmName] = useState("");
-  const [nmQty, setNmQty] = useState("");
-  const [nmUnit, setNmUnit] = useState("tabletas");
-  const [nmExpiresAt, setNmExpiresAt] = useState("");
-  const [nmDosage, setNmDosage] = useState("");
-  const [scanMode, setScanMode] = useState(false);
-  const scanInputRef = useRef<HTMLInputElement>(null);
-  const [newMeds, setNewMeds] = useState<Record<string, NewMedDraft>>({});
-  const [barcodeSearching, setBarcodeSearching] = useState(false);
 
   const [printEntry, setPrintEntry] = useState<EntryRequest | null>(null);
 
-  // cargar datos
+  // === NUEVO: buscador local para el combo de medicamentos ===
+  const [searchMedQuery, setSearchMedQuery] = useState("");
+
   const load = async () => {
-    setLoading(true);
-    setError(null);
     try {
       const [entryData, patientsData, medsData] = await Promise.all([
         api.listEntries({ type: typeFilter === "todos" ? undefined : (typeFilter as any) }),
@@ -137,13 +79,9 @@ export default function EntriesPage() {
       setFilteredEntries(entryData);
       setPatients(patientsData);
       setMedications(medsData);
-    } catch (error: any) {
-      console.error("Error al cargar registros:", error);
-      const errorMessage = error?.message || "Error desconocido al cargar los registros";
-      setError(`Error al cargar los registros: ${errorMessage}`);
-      // Mantener datos anteriores si hay error
-    } finally {
-      setLoading(false);
+    } catch (error) {
+      console.error(error);
+      alert("Error al cargar registros");
     }
   };
 
@@ -161,7 +99,6 @@ export default function EntriesPage() {
     setFilteredEntries(entries.filter(entry => entry.folio.toLowerCase().includes(q)));
   }, [entries, searchFolio]);
 
-  // helpers
   const resetForm = () => {
     setEntryType("salida");
     setPatientId("");
@@ -172,15 +109,7 @@ export default function EntriesPage() {
     setItemQty("");
     setItemDosis("");
     setItemFrecuencia("");
-    setNmBarcode("");
-    setNmName("");
-    setNmQty("");
-    setNmUnit("tabletas");
-    setNmExpiresAt("");
-    setNmDosage("");
-    setNewMeds({});
-    setScanMode(false);
-    setBarcodeSearching(false);
+    setSearchMedQuery("");
     setShowForm(false);
     setDueDateError(null);
   };
@@ -190,17 +119,16 @@ export default function EntriesPage() {
     [medications]
   );
 
-  const getPatientName = (id?: string) =>
-    !id
-      ? "Almacén"
-      : patients.find(p => p.id === id)?.name || "Desconocido";
+  // === NUEVO: lista filtrada para el combo (incluye CÓDIGO DE BARRAS) ===
+  const filteredMeds = useMemo(() => {
+    const q = searchMedQuery.trim().toLowerCase();
+    if (!q) return medications;
+    const matches = (s?: string) => (s ? s.toLowerCase().includes(q) : false);
+    return medications.filter(m =>
+      matches(m.name) || matches(m.unit) || matches(m.dosage) || matches((m as any).barcode)
+    );
+  }, [medications, searchMedQuery]);
 
-  const getMedicationLabel = (id: string) => {
-    const med = getMedById.get(id);
-    return med ? `${med.name}${med.unit ? ` (${med.unit})` : ""}` : "Medicamento";
-  };
-
-  // ---------- Agregar item (Salida/Caducidad) ----------
   const handleAddItem = () => {
     if (!selectedMedId || !itemQty || Number(itemQty) <= 0) {
       alert("Selecciona un medicamento y cantidad válida");
@@ -238,107 +166,37 @@ export default function EntriesPage() {
       newItem.frecuencia = itemFrecuencia.trim();
       newItem.fechaCaducidad = med.expiresAt;
     }
+
     if (entryType === "caducidad") {
       newItem.fechaCaducidad = med.expiresAt;
     }
 
-    setSelectedItems(prev => {
-      const updated = [...prev, newItem];
-      // Validar la fecha cuando se agrega un nuevo item
-      if (entryType === "salida" && dueDate) {
-        const error = validateDueDate(dueDate, updated);
-        setDueDateError(error);
-      }
-      return updated;
-    });
+    setSelectedItems(prev => [...prev, newItem]);
     setSelectedMedId("");
     setItemQty("");
     setItemDosis("");
     setItemFrecuencia("");
   };
 
-  // ---------- Agregar item (Entrada: NUEVO) ----------
-  const addItemEntradaNuevo = () => {
-    if (!nmName.trim() || !nmQty || !nmExpiresAt) {
-      alert("Completa nombre, cantidad y caducidad");
-      return;
-    }
-    const tempId = `new-${Date.now()}`;
-    const draft: NewMedDraft = {
-      name: nmName.trim(),
-      unit: nmUnit.trim() || undefined,
-      dosage: nmDosage.trim() || undefined,
-      expiresAt: nmExpiresAt,
-      barcode: nmBarcode.trim() || undefined
-    };
-    setNewMeds(prev => ({ ...prev, [tempId]: draft }));
-    setSelectedItems(prev => [...prev, { medicationId: tempId, qty: Number(nmQty) }]);
-
-    // limpiar subform
-    setNmBarcode("");
-    setNmName("");
-    setNmQty("");
-    setNmUnit("tabletas");
-    setNmExpiresAt("");
-    setNmDosage("");
-    setScanMode(false);
-  };
-
   const handleRemoveItem = (id: string) => {
     setSelectedItems(prev => prev.filter(i => i.medicationId !== id));
-    setNewMeds(prev => {
-      const c = { ...prev };
-      delete c[id];
-      return c;
-    });
   };
 
-  // ---------- Guardar ----------
   const handleCreateEntry = async () => {
-    if (selectedItems.length === 0) {
+    if (entryType !== "entrada" && (!patientId || selectedItems.length === 0)) {
+      alert("Selecciona un paciente y al menos un medicamento");
+      return;
+    }
+    if (entryType === "entrada" && selectedItems.length === 0) {
       alert("Agrega al menos un medicamento");
       return;
     }
-    if (entryType === "salida" && !patientId) {
-      alert("Selecciona un paciente");
-      return;
-    }
-
-    // Validar fecha antes de crear
-    if (entryType === "salida" && dueDate) {
-      const error = validateDueDate(dueDate, selectedItems);
-      if (error) {
-        alert(error);
-        return;
-      }
-    }
 
     try {
-      let itemsToSend: SelectedItem[] = [...selectedItems];
-
-      if (entryType === "entrada") {
-        for (const it of itemsToSend) {
-          if (it.medicationId.startsWith("new-")) {
-            const draft = newMeds[it.medicationId];
-            if (!draft) continue;
-            const created = await api.addMed({
-              name: draft.name,
-              qty: 0,
-              expiresAt: draft.expiresAt,
-              unit: draft.unit,
-              dosage: draft.dosage,
-              barcode: draft.barcode,
-              userId: user?.id
-            } as any);
-            it.medicationId = created.id;
-          }
-        }
-      }
-
-      // Construir payload sin patientId para entrada y caducidad
-      const payload: any = {
+      const payload = {
         type: entryType,
-        items: itemsToSend,
+        patientId: entryType === "entrada" ? patientId || "" : patientId, // no tocamos lógica backend
+        items: selectedItems,
         status: "completa",
         comment: comment.trim() || undefined,
         userId: user?.id
@@ -382,60 +240,22 @@ export default function EntriesPage() {
     }
   };
 
+  const getPatientName = (id: string) => patients.find(p => p.id === id)?.name || "Desconocido";
+
+  const getMedicationLabel = (id: string) => {
+    const med = getMedById.get(id);
+    return med ? `${med.name}${med.unit ? ` (${med.unit})` : ""}` : "Desconocido";
+  };
+
+  const getTotalItems = (entry: EntryRequest) =>
+    entry.items.reduce((sum, item) => sum + item.qty, 0);
+
   const entryTitle = (t: "entrada" | "salida" | "caducidad") =>
     t === "entrada"
       ? "ENTRADA DE ALMACÉN"
       : t === "salida"
       ? "SALIDA DE MEDICAMENTOS"
       : "REGISTRO DE CADUCIDAD";
-
-  // escaneo con lector USB/BT (solo ENTRADA, sin dependencias)
-  const startScan = () => {
-    setScanMode(true);
-    setNmBarcode("");
-    // Limpiar campos para nuevo escaneo
-    setNmName("");
-    setNmUnit("tabletas");
-    setNmDosage("");
-    setNmQty("");
-    setNmExpiresAt("");
-    setTimeout(() => scanInputRef.current?.focus(), 100);
-  };
-
-  // Buscar medicamento por código de barras cuando se ingresa
-  useEffect(() => {
-    if (!nmBarcode.trim() || !entryType || entryType !== "entrada") return;
-    
-    const searchBarcode = async () => {
-      setBarcodeSearching(true);
-      try {
-        const found = await api.findMedByBarcode(nmBarcode.trim());
-        if (found) {
-          // Llenar campos automáticamente
-          setNmName(found.name);
-          setNmUnit(found.unit || "tabletas");
-          setNmDosage(found.dosage || "");
-          // No llenamos cantidad ni fecha de caducidad porque pueden variar
-          // El usuario puede ajustar estos campos antes de agregar
-        }
-      } catch (error) {
-        // Si no se encuentra, no hacer nada - el usuario puede llenar manualmente
-      } finally {
-        setBarcodeSearching(false);
-      }
-    };
-
-    // Debounce para evitar búsquedas excesivas - solo buscar si el código tiene al menos 3 caracteres
-    if (nmBarcode.trim().length >= 3) {
-      const timeoutId = setTimeout(searchBarcode, 500);
-      return () => clearTimeout(timeoutId);
-    } else {
-      setBarcodeSearching(false);
-    }
-  }, [nmBarcode, entryType]);
-
-  const getTotalItems = (entry: EntryRequest) =>
-    entry.items.reduce((sum, item) => sum + item.qty, 0);
 
   return (
     <Page>
@@ -508,15 +328,8 @@ export default function EntriesPage() {
               </MenuItem>
             </TextField>
 
-            {entryType === "entrada" ? (
-              <Alert severity="info">
-                Movimiento de <strong>Entrada</strong>: no requiere paciente (se registra a nombre de <em>Almacén</em>).
-              </Alert>
-            ) : entryType === "caducidad" ? (
-              <Alert severity="info">
-                Movimiento de <strong>Caducidad</strong>: no requiere paciente (baja por vencimiento de almacén).
-              </Alert>
-            ) : (
+            {/* Paciente: visible solo para salida y caducidad */}
+            {(entryType === "salida" || entryType === "caducidad") && (
               <TextField
                 label="Paciente *"
                 select
@@ -539,33 +352,10 @@ export default function EntriesPage() {
                 type="date"
                 size="small"
                 value={dueDate}
-                onChange={(e) => {
-                  const newDate = e.target.value;
-                  setDueDate(newDate);
-                  const error = validateDueDate(newDate, selectedItems);
-                  setDueDateError(error);
-                }}
+                onChange={(e) => setDueDate(e.target.value)}
                 InputLabelProps={{ shrink: true }}
                 fullWidth
-                error={!!dueDateError}
-                helperText={dueDateError || "Próxima fecha estimada para entregar medicamentos"}
-                inputProps={{
-                  max: selectedItems.length > 0 
-                    ? (() => {
-                        // Encontrar la fecha de caducidad más temprana
-                        const dates = selectedItems
-                          .map(item => item.fechaCaducidad)
-                          .filter((date): date is string => !!date)
-                          .map(date => new Date(date));
-                        if (dates.length > 0) {
-                          const minDate = new Date(Math.min(...dates.map(d => d.getTime())));
-                          minDate.setDate(minDate.getDate() - 1); // Un día antes de la caducidad
-                          return minDate.toISOString().split('T')[0];
-                        }
-                        return undefined;
-                      })()
-                    : undefined
-                }}
+                helperText="Próxima fecha estimada para entregar medicamentos"
               />
             )}
 
@@ -573,27 +363,21 @@ export default function EntriesPage() {
               Medicamentos
             </Typography>
 
-            {/* Lista de items */}
             {selectedItems.length > 0 && (
               <Stack spacing={1}>
                 {selectedItems.map(item => {
-                  const med = item.medicationId.startsWith("new-")
-                    ? undefined
-                    : getMedById.get(item.medicationId);
-                  const label = item.medicationId.startsWith("new-")
-                    ? (newMeds[item.medicationId]?.name || "Nuevo medicamento")
-                    : (med?.name || "Desconocido");
-                  const unit = med?.unit || (item.medicationId.startsWith("new-") ? newMeds[item.medicationId]?.unit : undefined);
+                  const med = getMedById.get(item.medicationId);
                   return (
                     <Paper key={item.medicationId} sx={{ p: 1.5, bgcolor: "#f5f5f5" }}>
                       <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
                         <Box sx={{ flex: 1 }}>
                           <Typography variant="body2" fontWeight={600}>
-                            {label}
+                            {med?.name || "Desconocido"}
                           </Typography>
                           <Typography variant="caption" color="text.secondary" display="block">
-                            Cantidad: {item.qty} {unit || "unidades"}
+                            Cantidad: {item.qty} {med?.unit || "unidades"}
                           </Typography>
+
                           {entryType === "salida" && item.dosisRecomendada && (
                             <Typography variant="caption" color="text.secondary" display="block">
                               Dosis: {item.dosisRecomendada}
@@ -604,13 +388,18 @@ export default function EntriesPage() {
                               Frecuencia: {item.frecuencia}
                             </Typography>
                           )}
+
                           {(entryType === "salida" || entryType === "caducidad") && item.fechaCaducidad && (
                             <Typography variant="caption" color="text.secondary" display="block">
                               Caducidad: {new Date(item.fechaCaducidad).toLocaleDateString()}
                             </Typography>
                           )}
                         </Box>
-                        <IconButton size="small" color="error" onClick={() => handleRemoveItem(item.medicationId)}>
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => handleRemoveItem(item.medicationId)}
+                        >
                           <DeleteIcon fontSize="small" />
                         </IconButton>
                       </Stack>
@@ -620,284 +409,107 @@ export default function EntriesPage() {
               </Stack>
             )}
 
-            {/* Sección para agregar items */}
-            {entryType === "entrada" ? (
-              <Paper sx={{ p: 2, bgcolor: "#fff3e6", border: "1px solid #f97316" }}>
-                <Typography variant="body2" fontWeight={600} gutterBottom>
-                  Agregar “Nuevo Medicamento” (Entrada)
-                </Typography>
+            {/* =================== Agregar Medicamento (con buscador por CÓDIGO) =================== */}
+            <Paper sx={{ p: 2, bgcolor: "#fff3e6", border: "1px solid #f97316" }}>
+              <Typography variant="body2" fontWeight={600} gutterBottom>
+                Agregar Medicamento
+              </Typography>
 
-                <Stack spacing={1.5}>
-                  <Stack
-                    direction={{ xs: "column", sm: "row" }}
-                    spacing={1.5}
-                    alignItems={{ xs: "stretch", sm: "center" }}
-                  >
+              {/* Buscador local por nombre / unidad / dosis / código de barras */}
+              <TextField
+                label="Buscar por nombre, unidad, dosis o código de barras"
+                size="small"
+                fullWidth
+                sx={{ mb: 1.5 }}
+                value={searchMedQuery}
+                onChange={(e) => setSearchMedQuery(e.target.value)}
+                placeholder="Ej.: 7501234567890, Paracetamol, cápsulas, 500 mg..."
+                InputProps={{
+                  startAdornment: <SearchIcon sx={{ mr: 1, color: "text.secondary" }} />,
+                }}
+              />
+
+              <Stack spacing={1.5}>
+                <TextField
+                  label="Medicamento"
+                  select
+                  size="small"
+                  value={selectedMedId}
+                  onChange={(e) => setSelectedMedId(e.target.value)}
+                  fullWidth
+                >
+                  {filteredMeds.map((med) => (
+                    <MenuItem key={med.id} value={med.id}>
+                      <Stack direction="row" justifyContent="space-between" width="100%">
+                        <span>
+                          {med.name}
+                          {med.unit ? ` (${med.unit})` : ""}
+                          {med.dosage ? ` • ${med.dosage}` : ""}
+                        </span>
+                        <Typography variant="caption" color="text.secondary">
+                          {(med as any).barcode ? `CB: ${(med as any).barcode}` : ""}
+                        </Typography>
+                      </Stack>
+                    </MenuItem>
+                  ))}
+                </TextField>
+
+                <TextField
+                  label="Cantidad"
+                  type="number"
+                  size="small"
+                  value={itemQty}
+                  onChange={(e) => setItemQty(e.target.value)}
+                  fullWidth
+                  inputProps={{ min: 1 }}
+                />
+
+                {entryType === "salida" && (
+                  <>
                     <TextField
-                      label="Código de barras"
+                      label="Dosis recomendada *"
                       size="small"
-                      value={nmBarcode}
-                      onChange={(e) => setNmBarcode(e.target.value)}
+                      value={itemDosis}
+                      onChange={(e) => setItemDosis(e.target.value)}
                       fullWidth
+                      placeholder="Ej: 500mg, 1 tableta, 10ml, etc."
+                      helperText={
+                        selectedMedId
+                          ? (() => {
+                              const med = getMedById.get(selectedMedId);
+                              return med?.dosage ? `Dosis del medicamento: ${med.dosage}` : undefined;
+                            })()
+                          : undefined
+                      }
                     />
-                    <Button
-                      variant={scanMode ? "contained" : "outlined"}
-                      color={scanMode ? "warning" : "warning"}
-                      startIcon={<QrCodeScannerIcon />}
-                      onClick={() => {
-                        if (scanMode) {
-                          // Cancelar modo escaneo
-                          setScanMode(false);
-                          scanInputRef.current?.blur();
-                        } else {
-                          startScan();
-                        }
-                      }}
-                      sx={{ whiteSpace: "nowrap" }}
-                    >
-                      {scanMode ? "Cancelar escaneo" : "Escanear con lector"}
-                    </Button>
-                  </Stack>
 
-                  {/* Input oculto para capturar escaneo de lectores USB */}
-                  <input
-                    ref={scanInputRef}
-                    value={nmBarcode}
-                    onChange={(e) => {
-                      setNmBarcode(e.target.value);
-                      // Si el modo escaneo está activo y se detecta entrada rápida, es un escaneo
-                      if (scanMode && e.target.value.length > 0) {
-                        // El lector USB enviará Enter automáticamente al final
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && nmBarcode.trim().length > 0) {
-                        e.preventDefault();
-                        setScanMode(false);
-                        // El efecto de búsqueda se ejecutará automáticamente
-                        setTimeout(() => {
-                          if (nmName.trim()) {
-                            (document.getElementById("nm-qty") as HTMLInputElement | null)?.focus();
-                          } else {
-                            (document.getElementById("nm-name") as HTMLInputElement | null)?.focus();
-                          }
-                        }, 300);
-                      }
-                    }}
-                    onBlur={() => {
-                      // Si se pierde el foco y hay código, podría ser un escaneo completo
-                      if (scanMode && nmBarcode.trim().length > 0) {
-                        // Esperar un momento para ver si viene un Enter
-                        setTimeout(() => {
-                          if (nmBarcode.trim().length > 0 && !scanInputRef.current?.matches(":focus")) {
-                            // Si no hay foco y hay código, podría ser escaneo completo
-                            // Pero mejor esperar Enter explícito
-                          }
-                        }, 100);
-                      }
-                    }}
-                    placeholder=""
-                    autoComplete="off"
-                    aria-hidden="true"
-                    tabIndex={-1}
-                    style={{ 
-                      position: "absolute", 
-                      opacity: 0, 
-                      height: 0, 
-                      width: 0, 
-                      pointerEvents: scanMode ? "auto" : "none",
-                      left: "-9999px"
-                    }}
-                  />
-                  {scanMode && (
-                    <Alert severity="info" sx={{ mt: 1 }}>
-                      <Typography variant="caption" fontWeight="bold">
-                        Modo escaneo activo
-                      </Typography>
-                      <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
-                        • <strong>Lector USB:</strong> Apunta y escanea. El código se capturará automáticamente.
-                      </Typography>
-                      <Typography variant="caption" display="block">
-                        • <strong>App móvil:</strong> Asegúrate de que esté configurada como teclado virtual.
-                      </Typography>
-                      <Typography variant="caption" display="block" sx={{ mt: 0.5, fontStyle: "italic" }}>
-                        Presiona "Escanear con lector" nuevamente para cancelar.
-                      </Typography>
-                    </Alert>
-                  )}
-                  {barcodeSearching && (
-                    <Typography variant="caption" color="primary">
-                      Buscando medicamento...
-                    </Typography>
-                  )}
-                  {nmBarcode.trim() && !barcodeSearching && nmName.trim() && (
-                    <Alert severity="success" sx={{ mt: 1 }}>
-                      Medicamento encontrado: {nmName}. Puedes ajustar los datos si es necesario.
-                    </Alert>
-                  )}
-
-                  <TextField
-                    id="nm-name"
-                    label="Nombre *"
-                    size="small"
-                    value={nmName}
-                    onChange={(e) => setNmName(e.target.value)}
-                    fullWidth
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        (document.getElementById("nm-qty") as HTMLInputElement | null)?.focus();
-                      }
-                    }}
-                  />
-
-                  <Stack direction="row" spacing={1.5}>
                     <TextField
-                      id="nm-qty"
-                      label="Cantidad *"
-                      type="number"
+                      label="Cada cuándo tomar *"
                       size="small"
-                      value={nmQty}
-                      onChange={(e) => setNmQty(e.target.value)}
-                      inputProps={{ min: 1 }}
+                      value={itemFrecuencia}
+                      onChange={(e) => setItemFrecuencia(e.target.value)}
                       fullWidth
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          (document.getElementById("nm-expires") as HTMLInputElement | null)?.focus();
-                        }
-                      }}
+                      placeholder="Ej: Cada 8 horas, 3 veces al día, etc."
                     />
-                    <TextField
-                      label="Unidad *"
-                      select
-                      size="small"
-                      value={nmUnit}
-                      onChange={(e) => setNmUnit(e.target.value)}
-                      fullWidth
-                    >
-                      <MenuItem value="tabletas">Tabletas</MenuItem>
-                      <MenuItem value="ampolletas">Ampolletas</MenuItem>
-                      <MenuItem value="sobres">Sobres</MenuItem>
-                      <MenuItem value="frascos">Frascos</MenuItem>
-                      <MenuItem value="cajas">Cajas</MenuItem>
-                    </TextField>
-                  </Stack>
+                  </>
+                )}
 
-                  <TextField
-                    id="nm-expires"
-                    label="Fecha de caducidad *"
-                    type="date"
-                    size="small"
-                    value={nmExpiresAt}
-                    onChange={(e) => setNmExpiresAt(e.target.value)}
-                    InputLabelProps={{ shrink: true }}
-                    fullWidth
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        if (nmName.trim() && nmQty && nmExpiresAt) {
-                          addItemEntradaNuevo();
-                        }
-                      }
-                    }}
-                  />
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={handleAddItem}
+                  disabled={
+                    !selectedMedId ||
+                    !itemQty ||
+                    (entryType === "salida" && (!itemDosis.trim() || !itemFrecuencia.trim()))
+                  }
+                >
+                  Agregar
+                </Button>
+              </Stack>
+            </Paper>
 
-                  <TextField
-                    label="Dosis recomendada"
-                    size="small"
-                    value={nmDosage}
-                    onChange={(e) => setNmDosage(e.target.value)}
-                    fullWidth
-                  />
-
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    onClick={addItemEntradaNuevo}
-                    disabled={!nmName || !nmQty || !nmExpiresAt}
-                  >
-                    Agregar
-                  </Button>
-                </Stack>
-              </Paper>
-            ) : (
-              <Paper sx={{ p: 2, bgcolor: "#fff3e6", border: "1px solid #f97316" }}>
-                <Typography variant="body2" fontWeight={600} gutterBottom>
-                  Agregar Medicamento
-                </Typography>
-                <Stack spacing={1.5}>
-                  <TextField
-                    label="Medicamento"
-                    select
-                    size="small"
-                    value={selectedMedId}
-                    onChange={(e) => setSelectedMedId(e.target.value)}
-                    fullWidth
-                  >
-                    {medications.map(med => (
-                      <MenuItem key={med.id} value={med.id}>
-                        {med.name} - Disponible: {med.qty} {med.unit || ""}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-
-                  <TextField
-                    label="Cantidad"
-                    type="number"
-                    size="small"
-                    value={itemQty}
-                    onChange={(e) => setItemQty(e.target.value)}
-                    fullWidth
-                    inputProps={{ min: 1 }}
-                  />
-
-                  {entryType === "salida" && (
-                    <>
-                      <TextField
-                        label="Dosis recomendada *"
-                        size="small"
-                        value={itemDosis}
-                        onChange={(e) => setItemDosis(e.target.value)}
-                        fullWidth
-                        placeholder="Ej: 500mg, 1 tableta, 10ml, etc."
-                        helperText={
-                          selectedMedId
-                            ? (() => {
-                                const med = getMedById.get(selectedMedId);
-                                return med?.dosage ? `Dosis del medicamento: ${med.dosage}` : undefined;
-                              })()
-                            : undefined
-                        }
-                      />
-
-                      <TextField
-                        label="Cada cuándo tomar *"
-                        size="small"
-                        value={itemFrecuencia}
-                        onChange={(e) => setItemFrecuencia(e.target.value)}
-                        fullWidth
-                        placeholder="Ej: Cada 8 horas, 3 veces al día, etc."
-                      />
-                    </>
-                  )}
-
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    onClick={handleAddItem}
-                    disabled={
-                      !selectedMedId ||
-                      !itemQty ||
-                      (entryType === "salida" && (!itemDosis.trim() || !itemFrecuencia.trim()))
-                    }
-                  >
-                    Agregar
-                  </Button>
-                </Stack>
-              </Paper>
-            )}
-
+            {/* Comentario */}
             <TextField
               label="Comentario (opcional)"
               size="small"
@@ -930,37 +542,11 @@ export default function EntriesPage() {
         </Paper>
       )}
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
-
       <Typography variant="body2" color="text.secondary" mb={1}>
-        {loading ? "Cargando..." : `Mostrando ${filteredEntries.length} de ${entries.length} registros`}
+        Mostrando {filteredEntries.length} de {entries.length} registros
       </Typography>
 
-      {loading && entries.length === 0 ? (
-        <Alert severity="info" sx={{ mt: 2 }}>
-          Cargando registros, por favor espere...
-        </Alert>
-      ) : (
-        (() => {
-          // Determinar headers según el filtro
-          let headers: string[] = [];
-          if (typeFilter === "salida") {
-            headers = ["Folio", "Tipo", "Paciente", "Items", "Total", "Fecha", "Estado", "Acciones"];
-          } else if (typeFilter === "entrada") {
-            headers = ["Folio", "Tipo", "Items", "Total", "Fecha", "Estado", "Acciones"];
-          } else if (typeFilter === "caducidad") {
-            headers = ["Folio", "Tipo", "Items", "Total", "Fecha Caducidad", "Fecha Registro", "Estado", "Acciones"];
-          } else {
-            // Todos - mostrar todas las columnas
-            headers = ["Folio", "Tipo", "Paciente", "Items", "Total", "Fecha", "Estado", "Acciones"];
-          }
-
-          return (
-            <Table headers={headers}>
+      <Table headers={["Folio", "Tipo", "Paciente", "Items", "Total", "Fecha", "Estado", "Acciones"]}>
         <AnimatePresence initial={false}>
           {filteredEntries.map(entry => (
             <motion.tr
@@ -1043,17 +629,13 @@ export default function EntriesPage() {
           ))}
         </AnimatePresence>
       </Table>
-          );
-        })()
-      )}
 
-      {!loading && filteredEntries.length === 0 && (
+      {filteredEntries.length === 0 && (
         <Alert severity="info" sx={{ mt: 2 }}>
           No se encontraron registros.
         </Alert>
       )}
 
-      {/* Vista previa + impresión */}
       {printEntry && (
         <Box
           sx={{
@@ -1130,10 +712,9 @@ export default function EntriesPage() {
                 <tbody>
                   {printEntry.items.map((item, index) => {
                     const med = getMedById.get(item.medicationId);
-                    const label = med?.name || "Medicamento";
                     return (
                       <tr key={index} style={{ borderBottom: "1px solid #ccc" }}>
-                        <td style={{ padding: 8 }}>{label}</td>
+                        <td style={{ padding: 8 }}>{med?.name || "Desconocido"}</td>
                         <td style={{ padding: 8, textAlign: "right" }}>
                           {item.qty} {med?.unit || ""}
                         </td>
@@ -1144,7 +725,7 @@ export default function EntriesPage() {
                             <td style={{ padding: 8 }}>
                               {item.fechaCaducidad ? new Date(item.fechaCaducidad).toLocaleDateString() : "-"}
                             </td>
-                          </> 
+                          </>
                         )}
                         {printEntry.type === "caducidad" && (
                           <td style={{ padding: 8 }}>
@@ -1208,7 +789,7 @@ export default function EntriesPage() {
                     <tbody>
                       ${printEntry.items.map(item => {
                         const med = getMedById.get(item.medicationId);
-                        const medName = med?.name || "Medicamento";
+                        const medName = med?.name || "Desconocido";
                         const medUnit = med?.unit || "";
                         const cad = item.fechaCaducidad ? new Date(item.fechaCaducidad).toLocaleDateString() : "-";
                         return `

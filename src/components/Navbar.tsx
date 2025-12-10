@@ -1,102 +1,176 @@
-import { NavLink, useNavigate } from "react-router-dom";
-import { AppBar, Toolbar, Stack, Button, Box, Typography } from "@mui/material";
-import LoginIcon from "@mui/icons-material/Login";
-import MedicationIcon from "@mui/icons-material/Medication";
-import GroupIcon from "@mui/icons-material/Group";
-import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
-import Inventory2Icon from "@mui/icons-material/Inventory2";
-import PeopleAltIcon from "@mui/icons-material/PeopleAlt";
-import LogoutIcon from "@mui/icons-material/Logout";
-import logo from "../assets/logo.png";
+import { useState } from "react";
+import {
+  AppBar,
+  Toolbar,
+  Typography,
+  Box,
+  Button,
+  Menu,
+  MenuItem,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  IconButton,
+  InputAdornment
+} from "@mui/material";
+import MenuIcon from "@mui/icons-material/Menu";
+import Visibility from "@mui/icons-material/Visibility";
+import VisibilityOff from "@mui/icons-material/VisibilityOff";
+import { Link as RouterLink, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-
-const tabs = [
-  { to: "/",             label: "Inicio" },
-  { to: "/pacientes",    label: "Pacientes",    icon: <GroupIcon /> },
-  { to: "/medicamentos", label: "Medicamentos", icon: <MedicationIcon /> },
-  { to: "/entradas",     label: "Entradas",     icon: <AssignmentTurnedInIcon /> },
-  { to: "/objetos",      label: "Objetos",      icon: <Inventory2Icon /> },
-  { to: "/usuarios",     label: "Usuarios",     icon: <PeopleAltIcon /> },
-];
+import { api } from "../api/client";
 
 export default function Navbar() {
-  const { user, logout, isAuthenticated } = useAuth();
-  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+  const location = useLocation();
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const open = Boolean(anchorEl);
+
+  // Diálogo Cambiar contraseña
+  const [pwOpen, setPwOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const handleMenu = (event: React.MouseEvent<HTMLButtonElement>) => setAnchorEl(event.currentTarget);
+  const handleClose = () => setAnchorEl(null);
+
+  const submitChangePassword = async () => {
+    if (!user?.id) return;
+    if (!currentPassword.trim() || !newPassword.trim()) {
+      alert("Completa la contraseña actual y la nueva contraseña.");
+      return;
+    }
+    try {
+      setSaving(true);
+      // Tu API: (userId: string, currentPassword: string, newPassword: string)
+      await api.changePassword(user.id, currentPassword, newPassword);
+      alert("Contraseña actualizada");
+      setPwOpen(false);
+      setCurrentPassword("");
+      setNewPassword("");
+    } catch (e) {
+      console.error(e);
+      alert("No se pudo actualizar la contraseña. Verifica la contraseña actual.");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  // Filtrar pestañas según el rol del usuario
-  // Si no está autenticado o tiene rol "usuario", solo mostrar "Inicio"
-  const visibleTabs = isAuthenticated && user && user.role !== "usuario" 
-    ? tabs 
-    : tabs.filter(t => t.to === "/");
+  const linkStyle = (path: string) => ({
+    color: "#fff",
+    textDecoration: "none",
+    fontWeight: location.pathname === path ? 700 : 500,
+    opacity: location.pathname === path ? 1 : 0.9,
+    marginRight: 16
+  });
 
   return (
-    <AppBar position="sticky" color="inherit" elevation={0}
-      sx={{ borderBottom: "1px solid #eee", backdropFilter: "saturate(180%) blur(8px)" }}>
-      <Toolbar sx={{ gap: 1 }}>
-        {/* Logo */}
-        <NavLink to="/" style={{ textDecoration: "none" }}>
-          <Box sx={{ display: "inline-flex", alignItems: "center", pr: 1 }}>
-            <Box component="img" src={logo} alt="Logo" sx={{ height: 100, width: "auto", objectFit: "contain" }} />
-          </Box>
-        </NavLink>
+    <AppBar position="sticky" color="primary">
+      <Toolbar sx={{ gap: 2 }}>
+        <IconButton edge="start" color="inherit" aria-label="menu" sx={{ display: { xs: "inline-flex", md: "none" } }}>
+          <MenuIcon />
+        </IconButton>
 
-        <Box sx={{ flexGrow: 1 }} />
+        <Typography variant="h6" sx={{ flexGrow: 1 }}>
+          Asilo Las Margaritas
+        </Typography>
 
-        {/* Pestañas como BOTONES MUI - solo mostrar las permitidas según rol */}
-        {visibleTabs.length > 0 && (
-          <Stack direction="row" spacing={1} sx={{ mr: 1 }}>
-            {visibleTabs.map(t => (
-              <NavLink key={t.to} to={t.to} style={{ textDecoration: "none" }}>
-                {({ isActive }) => (
-                  <Button
-                    startIcon={t.icon}
-                    size="large"
-                    color={isActive ? "primary" : "inherit"}
-                    variant={isActive ? "contained" : "text"}
-                    sx={{
-                      ...( !isActive && {
-                        color: "text.primary",
-                        "&:hover": { backgroundColor: "rgba(248, 103, 0, 0.08)" } // naranja tenue al hover
-                      })
-                    }}
-                  >
-                    {t.label}
-                  </Button>
-                )}
-              </NavLink>
-            ))}
-          </Stack>
-        )}
+        {/* Navegación principal */}
+        <Box sx={{ display: { xs: "none", md: "flex" }, alignItems: "center" }}>
+          <RouterLink to="/dashboard" style={linkStyle("/dashboard")}>Dashboard</RouterLink>
+          <RouterLink to="/patients" style={linkStyle("/patients")}>Pacientes</RouterLink>
+          <RouterLink to="/meds" style={linkStyle("/meds")}>Medicamentos</RouterLink>
+          <RouterLink to="/entries" style={linkStyle("/entries")}>Control E/S</RouterLink>
+          <RouterLink to="/objects" style={linkStyle("/objects")}>Objetos</RouterLink>
+          <RouterLink to="/users" style={linkStyle("/users")}>Usuarios</RouterLink>
+        </Box>
 
-        {/* Usuario autenticado o Login */}
-        {isAuthenticated && user ? (
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Typography variant="body1" sx={{ color: "text.primary", fontWeight: 500 }}>
-              Bienvenido {user.name}
-            </Typography>
-            <Button 
-              variant="outlined" 
-              color="secondary" 
-              size="small" 
-              startIcon={<LogoutIcon />}
-              onClick={handleLogout}
+        <Box>
+          <Button color="inherit" onClick={handleMenu}>
+            {user?.name || "Cuenta"}
+          </Button>
+          <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
+            <MenuItem
+              onClick={() => {
+                setPwOpen(true);
+                handleClose();
+              }}
             >
+              Cambiar contraseña
+            </MenuItem>
+            <MenuItem onClick={() => { handleClose(); logout(); }}>
               Cerrar sesión
-            </Button>
-          </Stack>
-        ) : (
-          <NavLink to="/login" style={{ textDecoration: "none" }}>
-            <Button variant="outlined" color="primary" size="small" startIcon={<LoginIcon />}>
-              Iniciar sesión
-            </Button>
-          </NavLink>
-        )}
+            </MenuItem>
+          </Menu>
+        </Box>
       </Toolbar>
+
+      {/* Diálogo Cambiar contraseña */}
+      <Dialog open={pwOpen} onClose={() => setPwOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Cambiar contraseña</DialogTitle>
+        <DialogContent>
+          <TextField
+            label="Contraseña actual"
+            type={showCurrent ? "text" : "password"}
+            fullWidth
+            autoFocus
+            margin="dense"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    aria-label="mostrar contraseña actual"
+                    onClick={() => setShowCurrent((s) => !s)}
+                    edge="end"
+                  >
+                    {showCurrent ? <VisibilityOff /> : <Visibility />}
+                  </IconButton>
+                </InputAdornment>
+              )
+            }}
+          />
+
+          <TextField
+            label="Nueva contraseña"
+            type={showNew ? "text" : "password"}
+            fullWidth
+            margin="dense"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    aria-label="mostrar nueva contraseña"
+                    onClick={() => setShowNew((s) => !s)}
+                    edge="end"
+                  >
+                    {showNew ? <VisibilityOff /> : <Visibility />}
+                  </IconButton>
+                </InputAdornment>
+              )
+            }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPwOpen(false)}>Cancelar</Button>
+          <Button
+            variant="contained"
+            onClick={submitChangePassword}
+            disabled={!currentPassword.trim() || !newPassword.trim() || saving}
+          >
+            {saving ? "Guardando..." : "Guardar"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </AppBar>
   );
 }
