@@ -324,8 +324,12 @@ export class UserService {
           const usersEliminadoPorResult = await request.query('UPDATE users SET eliminado_por = NULL WHERE eliminado_por = @id');
           console.log(`Actualizado users.eliminado_por, filas afectadas: ${usersEliminadoPorResult.rowsAffected[0]}`);
         } catch (e: any) {
-          if (!e.message?.includes('Invalid column name')) {
+          // Ignorar errores de columna no existente, pero no abortar la transacción
+          if (e.message?.includes('Invalid column name')) {
+            console.log(`Columna users.eliminado_por no existe, omitiendo...`);
+          } else {
             console.warn(`Advertencia al limpiar users.eliminado_por: ${e.message}`);
+            // No lanzar el error para no abortar la transacción
           }
         }
         
@@ -334,8 +338,12 @@ export class UserService {
           const auditLogResult = await request.query('DELETE FROM audit_log WHERE usuario_id = @id');
           console.log(`Eliminados registros de audit_log, filas afectadas: ${auditLogResult.rowsAffected[0]}`);
         } catch (e: any) {
-          if (!e.message?.includes('Invalid object name')) {
+          // Ignorar errores de tabla no existente, pero no abortar la transacción
+          if (e.message?.includes('Invalid object name')) {
+            console.log(`Tabla audit_log no existe, omitiendo...`);
+          } else {
             console.warn(`Advertencia al limpiar audit_log: ${e.message}`);
+            // No lanzar el error para no abortar la transacción
           }
         }
         
@@ -352,14 +360,26 @@ export class UserService {
           const eliminadoPorResult = await request.query('UPDATE patients SET eliminado_por = NULL WHERE eliminado_por = @id');
           console.log(`Actualizado patients.eliminado_por, filas afectadas: ${eliminadoPorResult.rowsAffected[0]}`);
         } catch (e: any) {
-          if (!e.message?.includes('Invalid column name')) {
+          // Ignorar errores de columna no existente, pero no abortar la transacción
+          if (e.message?.includes('Invalid column name')) {
+            console.log(`Columna patients.eliminado_por no existe, omitiendo...`);
+          } else {
             console.warn(`Advertencia al limpiar patients.eliminado_por: ${e.message}`);
+            // No lanzar el error para no abortar la transacción
           }
         }
         
         for (const updateQuery of patientsUpdates) {
-          const result = await request.query(updateQuery);
-          console.log(`Actualizado: ${updateQuery}, filas afectadas: ${result.rowsAffected[0]}`);
+          try {
+            const result = await request.query(updateQuery);
+            console.log(`Actualizado: ${updateQuery}, filas afectadas: ${result.rowsAffected[0]}`);
+          } catch (e: any) {
+            // Ignorar errores de columna no existente, pero registrar otros errores
+            if (!e.message?.includes('Invalid column name')) {
+              console.warn(`Error al ejecutar ${updateQuery}: ${e.message}`);
+              // No lanzar el error para no abortar la transacción
+            }
+          }
         }
         
         // Tabla medications
@@ -369,13 +389,29 @@ export class UserService {
         ];
         
         for (const updateQuery of medicationsUpdates) {
-          const result = await request.query(updateQuery);
-          console.log(`Actualizado: ${updateQuery}, filas afectadas: ${result.rowsAffected[0]}`);
+          try {
+            const result = await request.query(updateQuery);
+            console.log(`Actualizado: ${updateQuery}, filas afectadas: ${result.rowsAffected[0]}`);
+          } catch (e: any) {
+            // Ignorar errores de columna no existente, pero registrar otros errores
+            if (!e.message?.includes('Invalid column name')) {
+              console.warn(`Error al ejecutar ${updateQuery}: ${e.message}`);
+              // No lanzar el error para no abortar la transacción
+            }
+          }
         }
         
         // Tabla patient_medications
-        const pmResult = await request.query('UPDATE patient_medications SET prescrito_por = NULL WHERE prescrito_por = @id');
-        console.log(`Actualizado patient_medications, filas afectadas: ${pmResult.rowsAffected[0]}`);
+        try {
+          const pmResult = await request.query('UPDATE patient_medications SET prescrito_por = NULL WHERE prescrito_por = @id');
+          console.log(`Actualizado patient_medications, filas afectadas: ${pmResult.rowsAffected[0]}`);
+        } catch (e: any) {
+          // Ignorar errores de columna no existente, pero registrar otros errores
+          if (!e.message?.includes('Invalid column name') && !e.message?.includes('Invalid object name')) {
+            console.warn(`Error al actualizar patient_medications: ${e.message}`);
+            // No lanzar el error para no abortar la transacción
+          }
+        }
         
         // Limpiar referencias en otras tablas si existen
         const otherTables = [
@@ -398,8 +434,10 @@ export class UserService {
             const result = await request.query(updateQuery);
             console.log(`Actualizado ${tableInfo.table}.${tableInfo.column}, filas afectadas: ${result.rowsAffected[0]}`);
           } catch (e: any) {
-            if (!e.message?.includes('Invalid object name')) {
+            // Ignorar errores de tabla/columna no existente, pero no abortar la transacción
+            if (!e.message?.includes('Invalid object name') && !e.message?.includes('Invalid column name')) {
               console.warn(`Advertencia al limpiar ${tableInfo.table}.${tableInfo.column}: ${e.message}`);
+              // No lanzar el error para no abortar la transacción
             }
           }
         }
@@ -462,10 +500,18 @@ export class UserService {
                 throw new Error(`Aún existen ${count} referencia(s) en ${tableInfo.table}.${column} al usuario ${id}`);
               }
             } catch (e: any) {
-              if (!e.message?.includes('Invalid object name') && !e.message?.includes('Invalid column name') && !e.message?.includes('Aún existen')) {
-                // Ignorar errores de tabla/columna no existente
-              } else if (e.message?.includes('Aún existen')) {
+              // Si es un error de "Aún existen", lanzarlo para abortar la transacción
+              if (e.message?.includes('Aún existen')) {
                 throw e;
+              }
+              // Ignorar errores de tabla/columna no existente, pero no abortar la transacción
+              if (e.message?.includes('Invalid object name') || e.message?.includes('Invalid column name')) {
+                console.log(`Tabla/columna ${tableInfo.table}.${column} no existe, omitiendo verificación...`);
+                // Continuar sin abortar la transacción
+              } else {
+                // Otros errores: registrar pero no abortar la transacción
+                console.warn(`Advertencia al verificar ${tableInfo.table}.${column}: ${e.message}`);
+                // No lanzar el error para no abortar la transacción
               }
             }
           }
@@ -499,23 +545,71 @@ export class UserService {
         
         // Verificar el estado del usuario ANTES del DELETE
         console.log('Verificando estado del usuario ANTES del DELETE...');
-        const beforeDeleteCheck = await request.query('SELECT id, nombre, eliminado_por FROM users WHERE id = @id');
-        console.log(`Usuario antes del DELETE:`, beforeDeleteCheck.recordset[0]);
-        
-        // Deshabilitar el trigger temporalmente para permitir hard delete
-        console.log('Deshabilitando trigger TRG_users_before_delete...');
+        let beforeDeleteUser: any = null;
         try {
-          await request.query('DISABLE TRIGGER TRG_users_before_delete ON users');
-          console.log('✓ Trigger deshabilitado');
+          const beforeDeleteCheck = await request.query('SELECT id, nombre, eliminado_por FROM users WHERE id = @id');
+          beforeDeleteUser = beforeDeleteCheck.recordset[0];
         } catch (e: any) {
-          console.warn(`No se pudo deshabilitar el trigger (puede que no exista): ${e.message}`);
+          // Si la columna eliminado_por no existe, intentar sin ella
+          if (e.message?.includes('Invalid column name') && e.message?.includes('eliminado_por')) {
+            const beforeDeleteCheck = await request.query('SELECT id, nombre FROM users WHERE id = @id');
+            beforeDeleteUser = beforeDeleteCheck.recordset[0];
+          } else {
+            throw e;
+          }
+        }
+        console.log(`Usuario antes del DELETE:`, beforeDeleteUser);
+        
+        // Verificar si el trigger existe antes de intentar deshabilitarlo
+        // Esto evita que SQL Server aborte la transacción si el trigger no existe
+        console.log('Verificando si existe el trigger TRG_users_before_delete...');
+        let triggerExists = false;
+        try {
+          const triggerCheck = await request.query(`
+            SELECT COUNT(*) as count 
+            FROM sys.triggers t
+            INNER JOIN sys.objects o ON t.parent_id = o.object_id
+            WHERE o.name = 'users' AND t.name = 'TRG_users_before_delete'
+          `);
+          triggerExists = (triggerCheck.recordset[0]?.count || 0) > 0;
+          console.log(`Trigger TRG_users_before_delete ${triggerExists ? 'existe' : 'no existe'}`);
+        } catch (e: any) {
+          console.warn(`No se pudo verificar si el trigger existe: ${e.message}`);
+          // Continuar sin deshabilitar el trigger
+        }
+        
+        // Deshabilitar el trigger solo si existe
+        if (triggerExists) {
+          console.log('Deshabilitando trigger TRG_users_before_delete...');
+          try {
+            await request.query('DISABLE TRIGGER TRG_users_before_delete ON users');
+            console.log('✓ Trigger deshabilitado');
+          } catch (e: any) {
+            console.warn(`No se pudo deshabilitar el trigger: ${e.message}`);
+            // Si el error aborta la transacción, lanzar el error
+            if (e.code === 'EABORT' || e.message?.includes('Transaction has been aborted')) {
+              throw new Error(`La transacción se abortó al intentar deshabilitar el trigger: ${e.message}`);
+            }
+          }
+        } else {
+          console.log('✓ No hay trigger que deshabilitar, continuando con el DELETE...');
         }
         
         // Eliminar el usuario
         console.log('Ejecutando DELETE FROM users...');
-        const deleteResult = await request.query('DELETE FROM users WHERE id = @id');
-        const rowsAffected = deleteResult.rowsAffected[0];
-        console.log(`Filas afectadas al eliminar usuario: ${rowsAffected}`);
+        let deleteResult: any;
+        let rowsAffected = 0;
+        try {
+          deleteResult = await request.query('DELETE FROM users WHERE id = @id');
+          rowsAffected = deleteResult.rowsAffected[0];
+          console.log(`Filas afectadas al eliminar usuario: ${rowsAffected}`);
+        } catch (deleteError: any) {
+          console.error(`ERROR al ejecutar DELETE: ${deleteError.message}`);
+          console.error(`Código de error: ${deleteError.code}`);
+          console.error(`Stack: ${deleteError.stack}`);
+          // Re-lanzar el error para que la transacción se revierta
+          throw new Error(`No se pudo eliminar el usuario: ${deleteError.message}`);
+        }
         
         // Re-habilitar el trigger
         console.log('Re-habilitando trigger TRG_users_before_delete...');
@@ -533,13 +627,24 @@ export class UserService {
         
         // Verificar que realmente se eliminó (dentro de la misma transacción)
         console.log('Verificando que el usuario fue eliminado...');
-        const verifyResult = await request.query('SELECT id, nombre, eliminado_por FROM users WHERE id = @id');
+        let verifyResult: any = null;
+        try {
+          verifyResult = await request.query('SELECT id, nombre, eliminado_por FROM users WHERE id = @id');
+        } catch (e: any) {
+          // Si la columna eliminado_por no existe, intentar sin ella
+          if (e.message?.includes('Invalid column name') && e.message?.includes('eliminado_por')) {
+            verifyResult = await request.query('SELECT id, nombre FROM users WHERE id = @id');
+          } else {
+            throw e;
+          }
+        }
+        
         if (verifyResult.recordset.length > 0) {
           const remainingUser = verifyResult.recordset[0];
           console.error(`ERROR: El usuario ${id} (${remainingUser.nombre}) aún existe después del DELETE dentro de la transacción!`);
           console.error(`Estado del usuario después del DELETE:`, remainingUser);
           
-          // Verificar si el usuario tiene eliminado_por (soft delete)
+          // Verificar si el usuario tiene eliminado_por (soft delete) - solo si existe la columna
           if (remainingUser.eliminado_por !== null && remainingUser.eliminado_por !== undefined) {
             console.error(`⚠️ El usuario tiene eliminado_por = ${remainingUser.eliminado_por}, podría ser un soft delete`);
           }
@@ -559,29 +664,46 @@ export class UserService {
           console.error('Foreign keys que podrían estar bloqueando:', errorInfo.recordset);
           
           // Verificar si hay alguna fila que aún referencia a este usuario
-          const blockingCheck = await request.query(`
-            SELECT 
-              'patients' AS tabla, 'creado_por' AS columna, COUNT(*) AS count
-            FROM patients WHERE creado_por = @id
-            UNION ALL
-            SELECT 'patients', 'actualizado_por', COUNT(*) FROM patients WHERE actualizado_por = @id
-            UNION ALL
-            SELECT 'patients', 'doctor_id', COUNT(*) FROM patients WHERE doctor_id = @id
-            UNION ALL
-            SELECT 'patients', 'enfermero_id', COUNT(*) FROM patients WHERE enfermero_id = @id
-            UNION ALL
-            SELECT 'patients', 'eliminado_por', COUNT(*) FROM patients WHERE eliminado_por = @id
-            UNION ALL
-            SELECT 'medications', 'creado_por', COUNT(*) FROM medications WHERE creado_por = @id
-            UNION ALL
-            SELECT 'medications', 'actualizado_por', COUNT(*) FROM medications WHERE actualizado_por = @id
-            UNION ALL
-            SELECT 'patient_medications', 'prescrito_por', COUNT(*) FROM patient_medications WHERE prescrito_por = @id
-            UNION ALL
-            SELECT 'audit_log', 'usuario_id', COUNT(*) FROM audit_log WHERE usuario_id = @id
-            UNION ALL
-            SELECT 'users', 'eliminado_por', COUNT(*) FROM users WHERE eliminado_por = @id
-          `);
+          let blockingCheck: any = null;
+          try {
+            blockingCheck = await request.query(`
+              SELECT 
+                'patients' AS tabla, 'creado_por' AS columna, COUNT(*) AS count
+              FROM patients WHERE creado_por = @id
+              UNION ALL
+              SELECT 'patients', 'actualizado_por', COUNT(*) FROM patients WHERE actualizado_por = @id
+              UNION ALL
+              SELECT 'patients', 'doctor_id', COUNT(*) FROM patients WHERE doctor_id = @id
+              UNION ALL
+              SELECT 'patients', 'enfermero_id', COUNT(*) FROM patients WHERE enfermero_id = @id
+              UNION ALL
+              SELECT 'medications', 'creado_por', COUNT(*) FROM medications WHERE creado_por = @id
+              UNION ALL
+              SELECT 'medications', 'actualizado_por', COUNT(*) FROM medications WHERE actualizado_por = @id
+              UNION ALL
+              SELECT 'patient_medications', 'prescrito_por', COUNT(*) FROM patient_medications WHERE prescrito_por = @id
+              UNION ALL
+              SELECT 'audit_log', 'usuario_id', COUNT(*) FROM audit_log WHERE usuario_id = @id
+            `);
+            
+            // Intentar agregar eliminado_por si existe
+            try {
+              const eliminadoPorCheck = await request.query(`
+                SELECT 'patients' AS tabla, 'eliminado_por' AS columna, COUNT(*) AS count FROM patients WHERE eliminado_por = @id
+                UNION ALL
+                SELECT 'users', 'eliminado_por', COUNT(*) FROM users WHERE eliminado_por = @id
+              `);
+              blockingCheck.recordset.push(...eliminadoPorCheck.recordset);
+            } catch (e: any) {
+              // Ignorar si la columna no existe
+              if (!e.message?.includes('Invalid column name')) {
+                console.warn(`Advertencia al verificar eliminado_por: ${e.message}`);
+              }
+            }
+          } catch (e: any) {
+            console.warn(`No se pudo verificar referencias bloqueadoras: ${e.message}`);
+            blockingCheck = { recordset: [] };
+          }
           
           const blockingRows = blockingCheck.recordset.filter((row: any) => row.count > 0);
           if (blockingRows.length > 0) {

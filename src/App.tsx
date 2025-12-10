@@ -52,7 +52,7 @@ function AnimatedRoutes() {
           </ProtectedRoute>
         } />
         <Route path="/users" element={
-          <ProtectedRoute excludeRoles={["nurse"]}>
+          <ProtectedRoute requiredRole="admin">
             <UsersPage />
           </ProtectedRoute>
         } />

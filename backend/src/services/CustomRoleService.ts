@@ -135,7 +135,7 @@ export class CustomRoleService {
       WHERE id = @id
     `, { id });
 
-    return result.rowsAffected > 0;
+    return result > 0;
   }
 
   // Verificar si un rol tiene un permiso específico

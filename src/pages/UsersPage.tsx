@@ -80,7 +80,7 @@ export default function UsersPage() {
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<User["role"]>("reception");
+  const [role, setRole] = useState<User["role"] | "">("");
   const [age, setAge] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [password, setPassword] = useState("");
@@ -173,7 +173,7 @@ export default function UsersPage() {
   const resetForm = () => {
     setName("");
     setEmail("");
-    setRole("reception");
+    setRole("");
     setAge("");
     setBirthDate("");
     setPassword("");
@@ -186,8 +186,8 @@ export default function UsersPage() {
   );
 
   const handleCreateUser = async () => {
-    if (!name.trim() || !email.trim() || !validateEmail(email) || !password.trim()) {
-      alert("Por favor completa nombre, correo válido y contraseña.");
+    if (!name.trim() || !email.trim() || !validateEmail(email) || !password.trim() || !role) {
+      alert("Por favor completa nombre, correo válido, contraseña y selecciona un rol.");
       return;
     }
 
@@ -473,11 +473,18 @@ export default function UsersPage() {
                 if (value === "__add_custom_role__") {
                   setShowCreateRoleDialog(true);
                 } else {
-                  setRole(value as User["role"]);
+                  setRole(value as User["role"] | "");
                 }
               }}
               fullWidth
+              SelectProps={{
+                displayEmpty: true,
+              }}
             >
+              <MenuItem value="" disabled>
+                <em>Elige un rol</em>
+              </MenuItem>
+              <Divider />
               <MenuItem value="admin">Administrador</MenuItem>
               <MenuItem value="doctor">Doctor/a</MenuItem>
               <MenuItem value="nurse">Enfermera/o</MenuItem>
@@ -527,15 +534,18 @@ export default function UsersPage() {
               helperText="Comparte esta contraseña con el usuario asignado."
             />
 
-            <Alert severity="warning">
-              <Typography variant="body2" fontWeight={600}>Permisos del rol seleccionado:</Typography>
-              <Typography variant="caption" component="div">
-                {role === "admin" && "• Acceso completo al sistema."}
-                {role === "doctor" && "• Gestión de pacientes y medicamentos, prescripciones."}
-                {role === "nurse" && "• Registro de medicamentos y cuidados de pacientes."}
-                {role === "reception" && "• Gestión de entradas/salidas y objetos personales."}
-              </Typography>
-            </Alert>
+            {role && (
+              <Alert severity="warning">
+                <Typography variant="body2" fontWeight={600}>Permisos del rol seleccionado:</Typography>
+                <Typography variant="caption" component="div">
+                  {role === "admin" && "• Acceso completo al sistema."}
+                  {role === "doctor" && "• Gestión de pacientes y medicamentos, prescripciones."}
+                  {role === "nurse" && "• Registro de medicamentos y cuidados de pacientes."}
+                  {role === "reception" && "• Gestión de entradas/salidas y objetos personales."}
+                  {customRoles.some(cr => cr.id === role) && "• Permisos personalizados según la configuración del rol."}
+                </Typography>
+              </Alert>
+            )}
 
             <Stack direction="row" spacing={2}>
               <Button variant="outlined" onClick={resetForm} fullWidth>
@@ -548,7 +558,8 @@ export default function UsersPage() {
                   !name.trim() ||
                   !email.trim() ||
                   !validateEmail(email) ||
-                  !password.trim()
+                  !password.trim() ||
+                  !role
                 }
                 fullWidth
               >
