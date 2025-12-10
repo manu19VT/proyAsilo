@@ -56,3 +56,5 @@ WHERE TABLE_NAME = 'caducidades'
 ORDER BY ORDINAL_POSITION;
 
 
+
+

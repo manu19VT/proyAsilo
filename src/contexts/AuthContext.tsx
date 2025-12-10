@@ -18,7 +18,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
       try {
-        setUser(JSON.parse(savedUser));
+        const parsedUser = JSON.parse(savedUser);
+        // El customRoleId ya viene desde la BD
+        setUser(parsedUser);
       } catch (e) {
         localStorage.removeItem('user');
       }
@@ -26,6 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = (userData: User) => {
+    // El customRoleId ya viene desde la BD
     setUser(userData);
     localStorage.setItem('user', JSON.stringify(userData));
   };

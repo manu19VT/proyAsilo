@@ -15,3 +15,5 @@ PRINT 'Columnas que tiene la tabla caducidades';
 PRINT '========================================';
 
 
+
+

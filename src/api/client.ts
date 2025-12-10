@@ -6,17 +6,32 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api
 async function request<T>(
   endpoint: string,
   options?: RequestInit,
-  timeout: number = 60000 // 60 segundos por defecto (aumentado para producción)
+  timeout: number = 60000, // 60 segundos por defecto (aumentado para producción)
+  noCache: boolean = false // Para evitar caché en GET requests
 ): Promise<T> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
   try {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options?.headers,
-      },
+    const url = noCache && endpoint.includes('?') 
+      ? `${API_BASE_URL}${endpoint}&_t=${Date.now()}`
+      : noCache && !endpoint.includes('?')
+      ? `${API_BASE_URL}${endpoint}?_t=${Date.now()}`
+      : `${API_BASE_URL}${endpoint}`;
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(options?.headers as Record<string, string> || {}),
+    };
+    
+    if (noCache) {
+      headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+      headers['Pragma'] = 'no-cache';
+      headers['Expires'] = '0';
+    }
+
+    const response = await fetch(url, {
+      headers,
       ...options,
       signal: controller.signal,
     });
@@ -270,9 +285,9 @@ export const api = {
   },
 
   // ========== Usuarios ==========
-  listUsers: async (role?: User['role']) => {
+  listUsers: async (role?: User['role'], noCache: boolean = false) => {
     const query = role ? `?role=${encodeURIComponent(role)}` : '';
-    return request<User[]>(`/users${query}`);
+    return request<User[]>(`/users${query}`, undefined, 60000, noCache);
   },
 
   listDoctors: async () => {
@@ -294,6 +309,7 @@ export const api = {
     password: string;
     age?: number;
     birthDate?: string;
+    customRoleId?: string;
   }) => {
     return request<User>('/users', {
       method: 'POST',
@@ -308,10 +324,10 @@ export const api = {
     });
   },
 
-  deleteUser: async (id: ID, password: string) => {
+  deleteUser: async (id: ID, password: string, adminEmail: string) => {
     return request<void>(`/users/${id}`, {
       method: 'DELETE',
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ password, adminEmail }),
     });
   },
 
@@ -319,6 +335,35 @@ export const api = {
     return request<User>(`/users/${userId}/change-password`, {
       method: 'POST',
       body: JSON.stringify({ currentPassword, newPassword, requireChange }),
+    });
+  },
+
+  // ========== Roles Personalizados ==========
+  listCustomRoles: async () => {
+    return request<Array<{ id: string; nombre: string; permisos: string[]; fechaCreacion: string; activo: boolean }>>(`/custom-roles`);
+  },
+
+  getCustomRole: async (id: ID) => {
+    return request<{ id: string; nombre: string; permisos: string[]; fechaCreacion: string; activo: boolean }>(`/custom-roles/${id}`);
+  },
+
+  createCustomRole: async (nombre: string, permisos: string[]) => {
+    return request<{ id: string; nombre: string; permisos: string[]; fechaCreacion: string; activo: boolean }>(`/custom-roles`, {
+      method: 'POST',
+      body: JSON.stringify({ nombre, permisos }),
+    });
+  },
+
+  updateCustomRole: async (id: ID, nombre: string, permisos: string[]) => {
+    return request<{ id: string; nombre: string; permisos: string[]; fechaCreacion: string; activo: boolean }>(`/custom-roles/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ nombre, permisos }),
+    });
+  },
+
+  deleteCustomRole: async (id: ID) => {
+    return request<void>(`/custom-roles/${id}`, {
+      method: 'DELETE',
     });
   },
 };

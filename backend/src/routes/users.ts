@@ -46,7 +46,7 @@ router.get('/:id', async (req, res) => {
 // Crear usuario (admin)
 router.post('/', async (req, res) => {
   try {
-    const { name, email, role, password, age, birthDate, requireChange } = req.body || {};
+    const { name, email, role, password, age, birthDate, requireChange, customRoleId } = req.body || {};
 
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'name, email y password son requeridos' });
@@ -64,7 +64,8 @@ router.post('/', async (req, res) => {
       passwordHash,
       age: age !== undefined ? Number(age) : undefined,
       birthDate: birthDate ?? null,
-      requireChange: !!requireChange
+      requireChange: !!requireChange,
+      customRoleId: customRoleId || undefined
     });
 
     res.status(201).json(user);
@@ -86,26 +87,26 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// Eliminar usuario (requiere confirmar contraseña de un administrador - Rick)
+// Eliminar usuario (requiere confirmar contraseña de un administrador)
 router.delete('/:id', async (req, res) => {
   try {
-    const { password } = req.body || {};
+    const { password, adminEmail } = req.body || {};
     
     if (!password || typeof password !== 'string') {
       return res.status(400).json({ error: 'Se requiere la contraseña de un administrador para eliminar usuarios' });
     }
 
-    // Buscar el usuario Rick (administrador) - primero por nombre, luego por email
-    let adminUser = await userService.getUserByName('Rick');
-    if (!adminUser || adminUser.role !== 'admin') {
-      // Si no se encuentra por nombre, intentar por email
-      adminUser = await userService.getUserByEmail('r@r.com');
-    }
-    if (!adminUser || adminUser.role !== 'admin') {
-      return res.status(403).json({ error: 'No se encontró un administrador válido' });
+    if (!adminEmail || typeof adminEmail !== 'string') {
+      return res.status(400).json({ error: 'Se requiere el email del administrador' });
     }
 
-    // Verificar la contraseña del administrador Rick
+    // Buscar el administrador por email
+    const adminUser = await userService.getUserByEmail(adminEmail);
+    if (!adminUser || adminUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Solo los administradores pueden eliminar usuarios' });
+    }
+
+    // Verificar la contraseña del administrador
     const crypto = await import('crypto');
     const hash = crypto.createHash('sha256');
     hash.update(`${adminUser.email!.toLowerCase()}::${password}`);
@@ -123,11 +124,16 @@ router.delete('/:id', async (req, res) => {
     }
 
     // Si la contraseña del admin es correcta, eliminar el usuario
-    const deleted = await userService.deleteUser(req.params.id);
-    if (!deleted) {
-      return res.status(404).json({ error: 'Usuario no encontrado' });
+    try {
+      const deleted = await userService.deleteUser(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: 'Usuario no encontrado o no se pudo eliminar' });
+      }
+      res.json({ message: 'Usuario eliminado correctamente' });
+    } catch (error: any) {
+      console.error('Error al eliminar usuario:', error);
+      return res.status(500).json({ error: error.message || 'Error al eliminar el usuario' });
     }
-    res.json({ message: 'Usuario eliminado correctamente' });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

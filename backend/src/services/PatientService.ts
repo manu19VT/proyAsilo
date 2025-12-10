@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { Patient, Contact, ID } from '../types';
+import { query } from '../database/database';
 import { query, queryOne, execute } from '../database/database';
 
 interface PatientFilters {
@@ -199,9 +200,35 @@ export class PatientService {
     return patient;
   }
 
+  // Obtener el siguiente número de paciente disponible
+  private async getNextPatientNumber(): Promise<number> {
+    try {
+      // Obtener todos los pacientes y encontrar el máximo número numérico
+      const allPatients = await this.listPatients();
+      
+      // Filtrar IDs que sean números válidos y encontrar el máximo
+      const numericIds = allPatients
+        .map(p => {
+          // Intentar parsear el ID como número
+          const num = parseInt(p.id, 10);
+          return isNaN(num) ? 0 : num;
+        })
+        .filter(n => n > 0);
+      
+      // Si hay IDs numéricos, retornar el máximo + 1, sino empezar desde 1
+      const maxNum = numericIds.length > 0 ? Math.max(...numericIds) : 0;
+      return maxNum + 1;
+    } catch (error) {
+      console.error('Error al obtener siguiente número de paciente:', error);
+      // Si hay error, empezar desde 1
+      return 1;
+    }
+  }
+
   // Crear nuevo paciente
   async createPatient(data: Omit<Patient, 'id' | 'contacts' | 'createdAt' | 'updatedAt' | 'createdByName' | 'updatedByName'> & { contacts?: Contact[]; createdBy?: string; doctorId?: string; nurseId?: string; userRole?: string }): Promise<Patient> {
-    const id = uuidv4();
+    const patientNumber = await this.getNextPatientNumber();
+    const id = String(patientNumber); // Convertir a string para mantener compatibilidad con el tipo ID
     const now = new Date().toISOString();
     const age = data.age ?? calculateAge(data.birthDate);
 

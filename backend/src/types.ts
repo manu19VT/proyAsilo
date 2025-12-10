@@ -78,6 +78,8 @@ export interface EntryRequest {
     dosisRecomendada?: string; // dosis recomendada (solo para salidas)
     frecuencia?: string; // cada cuándo tomar (solo para salidas)
     fechaCaducidad?: string; // fecha de caducidad del medicamento (para salidas y caducidad)
+    medicationName?: string; // nombre del medicamento (para medicamentos nuevos en entradas)
+    unit?: string; // unidad del medicamento (para entradas)
   }[];
   status: "completa" | "incompleta";
   dueDate?: string;
